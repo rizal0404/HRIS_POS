@@ -26,6 +26,9 @@ const AttendanceCard: React.FC<{
         return timestamp.toDate().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     };
 
+    const hasClockedIn = !!todayPresensi?.clockInTimestamp;
+    const hasClockedOut = !!todayPresensi?.clockOutTimestamp;
+
     return (
         <div className="bg-white p-6 rounded-xl shadow-md">
             <h2 className="text-lg font-bold text-slate-800 mb-4">Hari ini untuk dilakukan</h2>
@@ -39,8 +42,20 @@ const AttendanceCard: React.FC<{
                         </div>
                     </div>
                     <div className="flex-grow flex items-center gap-4 w-full sm:w-auto">
-                        <button onClick={() => onAttend('in')} className="flex-1 bg-green-500 text-white font-bold py-3 px-6 rounded-lg hover:bg-green-600 transition shadow-sm">In</button>
-                        <button onClick={() => onAttend('out')} className="flex-1 bg-red-500 text-white font-bold py-3 px-6 rounded-lg hover:bg-red-600 transition shadow-sm">Out</button>
+                        <button 
+                            onClick={() => onAttend('in')} 
+                            disabled={hasClockedIn}
+                            className="flex-1 bg-green-500 text-white font-bold py-3 px-6 rounded-lg hover:bg-green-600 transition shadow-sm disabled:bg-green-300 disabled:cursor-not-allowed"
+                        >
+                            In
+                        </button>
+                        <button 
+                            onClick={() => onAttend('out')} 
+                            disabled={!hasClockedIn || hasClockedOut}
+                            className="flex-1 bg-red-500 text-white font-bold py-3 px-6 rounded-lg hover:bg-red-600 transition shadow-sm disabled:bg-red-300 disabled:cursor-not-allowed"
+                        >
+                            Out
+                        </button>
                     </div>
                 </div>
                 {(todayPresensi?.clockInTimestamp || todayPresensi?.clockOutTimestamp) && (
@@ -79,7 +94,7 @@ export const DashboardContent: React.FC<{
                 <p className="mt-1 opacity-90">Selamat datang di dasbor Anda.</p>
             </div>
 
-             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+             <div className="grid grid-cols-3 gap-4">
                  <div className="bg-white p-4 rounded-xl shadow-md text-center">
                     <p className="text-xs text-slate-500">Ajuan Karyawan Dalam Proses</p>
                     <p className="text-2xl font-bold text-slate-800">{ajuanDalamProses}</p>

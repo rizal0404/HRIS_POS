@@ -445,7 +445,31 @@ const PegawaiPage: React.FC<PegawaiPageProps> = ({ user, onLogout }) => {
     fetchData();
   }
 
+  const todayPresensi = useMemo(() => {
+      const today = new Date();
+      const todayStr = `${String(today.getDate()).padStart(2, '0')}/${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`;
+      return presensi.find(p => p.tanggal === todayStr);
+  }, [presensi]);
+
   const handleAttendanceClick = (action: 'in' | 'out') => {
+    if (action === 'in') {
+      if (todayPresensi?.clockInTimestamp) {
+        setAlert({ message: 'Anda sudah melakukan clock-in hari ini.', type: 'error' });
+        return;
+      }
+    }
+
+    if (action === 'out') {
+      if (!todayPresensi?.clockInTimestamp) {
+        setAlert({ message: 'Anda harus clock-in terlebih dahulu sebelum clock-out.', type: 'error' });
+        return;
+      }
+      if (todayPresensi?.clockOutTimestamp) {
+        setAlert({ message: 'Anda sudah melakukan clock-out hari ini.', type: 'error' });
+        return;
+      }
+    }
+
     setAttendanceAction(action);
     setIsAttendanceModalOpen(true);
   };
@@ -496,12 +520,6 @@ const PegawaiPage: React.FC<PegawaiPageProps> = ({ user, onLogout }) => {
         setCutiToCancelId(null);
     };
 
-
-  const todayPresensi = useMemo(() => {
-      const today = new Date();
-      const todayStr = `${String(today.getDate()).padStart(2, '0')}/${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`;
-      return presensi.find(p => p.tanggal === todayStr);
-  }, [presensi]);
 
   if (isLoading) {
     return <div className="flex justify-center items-center h-screen">Loading...</div>;
