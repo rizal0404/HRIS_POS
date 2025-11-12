@@ -1,0 +1,8 @@
+{
+  "name": "HR Management Dashboard_Supabase",
+  "description": "An application for managing employee work schedules, leave, and overtime requests, designed for employees, supervisors, and managers.",
+  "requestFramePermissions": [
+    "camera",
+    "geolocation"
+  ]
+}

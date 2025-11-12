@@ -1,0 +1,330 @@
+// This tells TypeScript that these variables are loaded globally from the script tags in index.html
+declare const jspdf: any;
+declare const html2canvas: any;
+
+import React, { useState, useMemo, useRef } from 'react';
+import ReactDOM from 'react-dom/client';
+import { UserProfile, UsulanLembur, UsulanCuti, JadwalKerja, ShiftConfig, UsulanStatus, Presensi, UsulanPembetulanPresensi, VendorConfig } from '../../../types';
+import { SearchIcon, PrintIcon } from '../../../components/Icons';
+
+const monthNames = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+const currentYear = new Date().getFullYear();
+const years = Array.from({ length: 10 }, (_, i) => currentYear - 5 + i);
+
+const PrintableReport = React.forwardRef<HTMLDivElement, {
+    reportData: any[],
+    employee: UserProfile,
+    vendor: VendorConfig | undefined,
+}>(({ reportData, employee, vendor }, ref) => {
+    
+    const totalLembur = reportData.reduce((acc, row) => {
+        const jam = parseFloat(row.jamLembur);
+        return acc + (isNaN(jam) ? 0 : jam);
+    }, 0);
+
+    const polaShift = [...new Set(reportData.map(d => {
+        const shift = d.shift?.toUpperCase();
+        if (shift && !['LIBUR', 'OFF', 'CUTI'].includes(shift)) {
+            return shift;
+        }
+        return null;
+    }).filter(Boolean))].join(', ');
+
+    return (
+        <div ref={ref} className="bg-white p-8 font-sans text-black" style={{ width: '794px' }}>
+            {/* Header */}
+            <div className="text-center font-bold mb-4">
+                <p className="text-sm">KOPKAR SEMEN TONASA</p>
+                <p className="text-sm">MONITORING DAFTAR HADIR & SURAT PERINTAH LEMBUR (SPL)</p>
+            </div>
+
+            {/* User Info */}
+            <div className="flex justify-between text-xs mb-2">
+                <table className="text-xs">
+                    <tbody>
+                        <tr><td className="pr-2 font-normal">Nama</td><td>: {employee.name}</td></tr>
+                        <tr><td className="pr-2 font-normal">No. ID</td><td>: {employee.nik}</td></tr>
+                        <tr><td className="pr-2 font-normal">Pola Shift</td><td>: {polaShift}</td></tr>
+                    </tbody>
+                </table>
+                <table className="text-xs">
+                    <tbody>
+                        <tr><td className="pr-2 font-normal">Seksi</td><td>: {employee.seksi}</td></tr>
+                        <tr><td className="pr-2 font-normal">Unit</td><td>: {employee.unitKerja}</td></tr>
+                        <tr><td className="pr-2 font-normal">Departemen</td><td>: Production Planning & Control</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            {/* Table */}
+            <table className="w-full border-collapse border border-black text-xs text-center">
+                <thead className="font-bold">
+                    <tr>
+                        <th rowSpan={2} className="border border-black p-2">No.</th>
+                        <th rowSpan={2} className="border border-black p-2">Tgl</th>
+                        <th colSpan={2} className="border border-black p-2">Jam Kerja Shift</th>
+                        <th rowSpan={2} className="border border-black p-2 break-words">Jam Kerja Aktual</th>
+                        <th colSpan={3} className="border border-black p-2">Lembur</th>
+                        <th rowSpan={2} className="border border-black p-2 break-words">Realisasi Uraian Pekerjaan</th>
+                        <th rowSpan={2} className="border border-black p-2 break-words">Memerintahkan / Menyetujui</th>
+                        <th rowSpan={2} className="border border-black p-2 break-words">Keterangan</th>
+                    </tr>
+                    <tr>
+                        <th className="border border-black p-2">Masuk</th>
+                        <th className="border border-black p-2">Pulang</th>
+                        <th className="border border-black p-2">Mulai</th>
+                        <th className="border border-black p-2">Selesai</th>
+                        <th className="border border-black p-2">Jam Lembur</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {reportData.map(row => (
+                        <tr key={row.no}>
+                            <td className="border border-black p-1">{row.no}</td>
+                            <td className="border border-black p-1">{row.tgl}</td>
+                            <td className="border border-black p-1">{row.shiftMasuk}</td>
+                            <td className="border border-black p-1">{row.shiftPulang}</td>
+                            <td className="border border-black p-1">{row.jamAktual}</td>
+                            <td className="border border-black p-1">{row.lemburMulai}</td>
+                            <td className="border border-black p-1">{row.lemburSelesai}</td>
+                            <td className="border border-black p-1">{row.jamLembur}</td>
+                            <td className="border border-black p-1 text-left">{row.uraianPekerjaan}</td>
+                            <td className="border border-black p-1">{row.menyetujui}</td>
+                            <td className="border border-black p-1">{row.keterangan}</td>
+                        </tr>
+                    ))}
+                     <tr>
+                        <td colSpan={7} className="border border-black p-1 font-bold text-right">Total Jam Lembur</td>
+                        <td className="border border-black p-1 font-bold">{totalLembur > 0 ? `${totalLembur} jam` : ''}</td>
+                        <td colSpan={3} className="border border-black p-1"></td>
+                    </tr>
+                </tbody>
+            </table>
+
+            {/* Footer */}
+            <table className="w-full mt-8 text-xs">
+                <tbody>
+                    <tr>
+                        <td className="w-1/2 text-left align-top">
+                            <p>Vendor</p>
+                            <p className="font-bold">{vendor?.namaVendor || 'KOPERASI SEMEN TONASA'}</p>
+                            <p className="mt-12 font-bold underline">{vendor?.namaAdmin || 'MUH. KASIM'}</p>
+                        </td>
+                        <td className="w-1/2 text-center align-top">
+                            <p>Mengetahui,</p>
+                            <p className="font-bold">SECTION OF {employee.seksi}</p>
+                            <p className="mt-12 font-bold underline">{employee.manager?.name || 'M. RIZAL M.'}</p>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    );
+});
+
+
+interface MonitoringLemburViewProps {
+    user: UserProfile;
+    usulanLembur: UsulanLembur[];
+    usulanCuti: UsulanCuti[];
+    usulanPembetulan: UsulanPembetulanPresensi[];
+    jadwal: JadwalKerja[];
+    shiftConfigs: ShiftConfig[];
+    presensi: Presensi[];
+    vendorConfigs: VendorConfig[];
+}
+
+export const MonitoringLemburView: React.FC<MonitoringLemburViewProps> = ({ user, usulanLembur, usulanCuti, usulanPembetulan, jadwal, shiftConfigs, presensi, vendorConfigs }) => {
+    const [selectedMonth, setSelectedMonth] = useState(10); // November (0-indexed)
+    const [selectedYear, setSelectedYear] = useState(2025);
+    const [isDownloading, setIsDownloading] = useState(false);
+
+    const shiftMap = useMemo(() => new Map(shiftConfigs.map(sc => [sc.code, sc])), [shiftConfigs]);
+
+    const reportData = useMemo(() => {
+        const daysInMonth = new Date(selectedYear, selectedMonth + 1, 0).getDate();
+        const data = [];
+
+        for (let i = 1; i <= daysInMonth; i++) {
+            const date = new Date(selectedYear, selectedMonth, i);
+            const dateStringDDMMYYYY = `${String(i).padStart(2, '0')}/${String(selectedMonth + 1).padStart(2, '0')}/${selectedYear}`;
+            const dateStringYYYYMMDD = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
+            
+            const schedule = jadwal.find(j => j.tanggal === dateStringDDMMYYYY);
+            let presensiRecord = presensi.find(p => p.tanggal === dateStringDDMMYYYY);
+            const lemburRecord = usulanLembur.find(l => l.tanggalLembur === dateStringYYYYMMDD && l.status === UsulanStatus.Disetujui);
+            const cutiRecord = usulanCuti.find(c => c.status === UsulanStatus.Disetujui && date >= new Date(c.periode.startDate + 'T00:00:00') && date <= new Date(c.periode.endDate + 'T00:00:00'));
+            
+            const approvedCorrections = usulanPembetulan.filter(p => p.tanggalPembetulan === dateStringYYYYMMDD && p.status === UsulanStatus.Disetujui);
+            if (approvedCorrections.length > 0) {
+                let finalPresensi = presensiRecord ? { ...presensiRecord } : { id: `corrected-${user.nik}-${dateStringDDMMYYYY}`, nik: user.nik, nama: user.name, tanggal: dateStringDDMMYYYY, shift: schedule?.shift || 'OFF' };
+                const inCorrection = approvedCorrections.find(c => c.clockType === 'in');
+                if (inCorrection) finalPresensi.clockInTimestamp = { toDate: () => new Date(`${inCorrection.tanggalPembetulan}T${inCorrection.jamPembetulan}`) };
+                const outCorrection = approvedCorrections.find(c => c.clockType === 'out');
+                if (outCorrection) finalPresensi.clockOutTimestamp = { toDate: () => new Date(`${outCorrection.tanggalPembetulan}T${outCorrection.jamPembetulan}`) };
+                presensiRecord = finalPresensi;
+            }
+
+            const shiftInfo = schedule ? shiftMap.get(schedule.shift) : null;
+            const [regulerMasuk, regulerPulang] = (schedule?.shift === 'OFF' || cutiRecord) ? ['OFF', 'OFF'] : (shiftInfo?.time.split('-') || ['', '']);
+
+            const formatTime = (ts: any) => ts ? new Date(ts.toDate()).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace(/\./g,':') : '';
+            const jamAktual = cutiRecord ? 'Cuti' : (presensiRecord ? `${formatTime(presensiRecord.clockInTimestamp)} - ${formatTime(presensiRecord.clockOutTimestamp)}`.replace(/^ - $/, '') : '');
+
+            let keterangan = '';
+            if (cutiRecord) {
+                keterangan = cutiRecord.jenisAjuan;
+            }
+            if (lemburRecord) {
+                if (keterangan) {
+                    keterangan += '; Lembur';
+                } else {
+                    keterangan = 'Lembur';
+                }
+            }
+
+            data.push({
+                no: i,
+                tgl: `${String(i).padStart(2, '0')}/${String(selectedMonth + 1).padStart(2, '0')}`,
+                shiftMasuk: regulerMasuk,
+                shiftPulang: regulerPulang,
+                jamAktual: jamAktual,
+                lemburMulai: lemburRecord?.jamAwal || '',
+                lemburSelesai: lemburRecord?.jamAkhir || '',
+                jamLembur: lemburRecord ? `${lemburRecord.jamLembur} jam` : '',
+                uraianPekerjaan: lemburRecord?.keteranganLembur || (cutiRecord ? 'pangkep' : ''),
+                menyetujui: lemburRecord ? (user.manager?.name || 'SUPER ADMIN') : (cutiRecord ? (user.manager?.name || '') : ''),
+                keterangan: keterangan,
+                shift: schedule?.shift || (cutiRecord ? 'CUTI' : 'OFF'),
+            });
+        }
+        return data;
+    }, [user, selectedMonth, selectedYear, jadwal, presensi, usulanLembur, usulanCuti, usulanPembetulan, shiftMap]);
+    
+    const handleDownload = async () => {
+        setIsDownloading(true);
+        const hiddenPrintDiv = document.createElement('div');
+        hiddenPrintDiv.style.position = 'fixed';
+        hiddenPrintDiv.style.top = '0';
+        hiddenPrintDiv.style.left = '0';
+        hiddenPrintDiv.style.width = '794px';
+        hiddenPrintDiv.style.zIndex = '-1';
+        hiddenPrintDiv.style.opacity = '0';
+        hiddenPrintDiv.style.pointerEvents = 'none';
+        document.body.appendChild(hiddenPrintDiv);
+
+        const root = ReactDOM.createRoot(hiddenPrintDiv);
+
+        root.render(
+            <PrintableReport
+                reportData={reportData}
+                employee={user}
+                vendor={vendorConfigs[0]}
+            />
+        );
+
+        await document.fonts.ready;
+        await new Promise(resolve => setTimeout(resolve, 500)); // Small delay for rendering
+
+        try {
+            const { jsPDF } = jspdf;
+            const reportElement = hiddenPrintDiv.children[0] as HTMLElement;
+
+            const canvas = await html2canvas(reportElement, {
+                scale: 2,
+                useCORS: true,
+                logging: false,
+                width: reportElement.scrollWidth,
+                height: reportElement.scrollHeight,
+                windowWidth: reportElement.scrollWidth,
+                windowHeight: reportElement.scrollHeight,
+            });
+            const imgData = canvas.toDataURL('image/png');
+            
+            const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+            const pdfPageWidth = pdf.internal.pageSize.getWidth();
+            const pdfPageHeight = pdf.internal.pageSize.getHeight();
+            
+            const imgProps = pdf.getImageProperties(imgData);
+            const imgAspectRatio = imgProps.width / imgProps.height;
+            
+            let finalImgWidth = pdfPageWidth - 20; // with margin
+            let finalImgHeight = finalImgWidth / imgAspectRatio;
+
+            if (finalImgHeight > pdfPageHeight - 20) {
+                finalImgHeight = pdfPageHeight - 20;
+                finalImgWidth = finalImgHeight * imgAspectRatio;
+            }
+            
+            const x = (pdfPageWidth - finalImgWidth) / 2;
+            const y = (pdfPageHeight - finalImgHeight) / 2;
+    
+            pdf.addImage(imgData, 'PNG', x, y, finalImgWidth, finalImgHeight);
+            pdf.save(`Monitoring_Lembur_${user.nik}_${selectedYear}-${selectedMonth + 1}.pdf`);
+
+        } catch (error) {
+            console.error("Failed to generate PDF:", error);
+        } finally {
+            root.unmount();
+            document.body.removeChild(hiddenPrintDiv);
+            setIsDownloading(false);
+        }
+    };
+
+
+    return (
+        <div>
+             <div className="p-4 bg-gray-50 border-b flex flex-wrap gap-4 items-center">
+                <select value={selectedMonth} onChange={e => setSelectedMonth(Number(e.target.value))} className="form-select rounded-md border-gray-300 shadow-sm">
+                    {monthNames.map((name, index) => <option key={name} value={index}>{name}</option>)}
+                </select>
+                <select value={selectedYear} onChange={e => setSelectedYear(Number(e.target.value))} className="form-select rounded-md border-gray-300 shadow-sm">
+                    {years.map(year => <option key={year} value={year}>{year}</option>)}
+                </select>
+                 <button className="bg-gray-700 text-white p-2 rounded-md hover:bg-gray-800"><SearchIcon className="w-5 h-5"/></button>
+                 <button onClick={handleDownload} disabled={isDownloading} className="bg-green-600 text-white p-2 rounded-md hover:bg-green-700 disabled:bg-green-300 flex items-center gap-2">
+                    <PrintIcon className="w-5 h-5"/>
+                    <span>{isDownloading ? 'Mencetak...' : 'Download'}</span>
+                 </button>
+             </div>
+             <div className="overflow-x-auto p-4">
+                 <table className="min-w-full text-xs border-collapse border border-gray-300">
+                     <thead className="bg-gray-100 text-center font-bold">
+                         <tr>
+                            <th rowSpan={2} className="border border-gray-300 p-1">No</th>
+                            <th colSpan={2} className="border border-gray-300 p-1">Jam Kerja Shift</th>
+                            <th rowSpan={2} className="border border-gray-300 p-1">Jam Kerja Aktual</th>
+                            <th colSpan={3} className="border border-gray-300 p-1">Lembur</th>
+                            <th rowSpan={2} className="border border-gray-300 p-1">Realisasi Uraian Pekerjaan</th>
+                            <th rowSpan={2} className="border border-gray-300 p-1">Memerintahkan / Menyetujui</th>
+                            <th rowSpan={2} className="border border-gray-300 p-1">Keterangan</th>
+                        </tr>
+                        <tr>
+                            <th className="border border-gray-300 p-1">Masuk</th>
+                            <th className="border border-gray-300 p-1">Pulang</th>
+                            <th className="border border-gray-300 p-1">Mulai</th>
+                            <th className="border border-gray-300 p-1">Selesai</th>
+                            <th className="border border-gray-300 p-1">Jam Lembur</th>
+                        </tr>
+                     </thead>
+                     <tbody className="text-center">
+                         {reportData.map(row => (
+                             <tr key={row.no} className="even:bg-gray-50">
+                                <td className="border border-gray-300 p-1">{row.no}</td>
+                                <td className="border border-gray-300 p-1">{row.shiftMasuk}</td>
+                                <td className="border border-gray-300 p-1">{row.shiftPulang}</td>
+                                <td className="border border-gray-300 p-1">{row.jamAktual}</td>
+                                <td className="border border-gray-300 p-1">{row.lemburMulai}</td>
+                                <td className="border border-gray-300 p-1">{row.lemburSelesai}</td>
+                                <td className="border border-gray-300 p-1">{row.jamLembur}</td>
+                                <td className="border border-gray-300 p-1">{row.uraianPekerjaan}</td>
+                                <td className="border border-gray-300 p-1">{row.menyetujui}</td>
+                                <td className="border border-gray-300 p-1">{row.keterangan}</td>
+                             </tr>
+                         ))}
+                     </tbody>
+                 </table>
+             </div>
+        </div>
+    );
+};
