@@ -1,8 +1,11 @@
 import { createClient } from '@supabase/supabase-js';
 
 // Provided Supabase project details
-const supabaseUrl = 'https://zmrkdtmmbrnjfizzgpsr.supabase.co';
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InptcmtkdG1tYnJuamZpenpncHNyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI3ODQ0NzYsImV4cCI6MjA3ODM2MDQ3Nn0.7g4l6XyTnltXnkh5OaqFRbry4ChOJ7cU_u5hfObUjUo';
-
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_ANON_KEY;
 // Initialize and export the Supabase client
+if (!supabaseUrl || !supabaseKey) {
+    throw new Error("Supabase URL and Anon Key must be provided in environment variables.");
+}
+
 export const supabase = createClient(supabaseUrl, supabaseKey);
