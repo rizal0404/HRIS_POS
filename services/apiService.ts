@@ -610,6 +610,11 @@ export const apiService = {
     handleSupabaseError(error, 'setFingerprintForUser');
   },
 
+  resetFingerprintForUser: async (userId: string): Promise<void> => {
+    const { error } = await supabase.from('user_device_fingerprints').delete().eq('user_id', userId);
+    handleSupabaseError(error, 'resetFingerprintForUser');
+  },
+
   // --- PRESENSI (LIVE DATA) ---
   getAllPresensi: async (): Promise<Presensi[]> => {
     const { data, error } = await supabase.from('presensi').select('*');

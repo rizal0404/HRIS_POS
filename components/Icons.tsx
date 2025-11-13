@@ -222,3 +222,15 @@ export const AlertTriangleIcon = ({ className = 'w-6 h-6' }: { className?: strin
         <line x1="12" y1="17" x2="12.01" y2="17"></line>
     </svg>
 );
+
+export const FingerprintIcon = ({ className = 'w-6 h-6' }: { className?: string }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M2 12C2 6.5 6.5 2 12 2a10 10 0 0 1 8 4"/>
+      <path d="M5 12a7 7 0 0 1 14 0"/>
+      <path d="M8.5 12a3.5 3.5 0 0 1 7 0"/>
+      <path d="M12 12a1 1 0 0 1-1-1v-1a1 1 0 0 1 2 0v1a1 1 0 0 1-1 1z"/>
+      <path d="M20 12a8 8 0 0 0-8 8"/>
+      <path d="M17 12a5 5 0 0 0-5 5"/>
+      <path d="M14.5 12a2.5 2.5 0 0 0-2.5 2.5"/>
+    </svg>
+);

@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { UserProfile, UserRole, Shift, Seksi, UnitKerja } from '../../types';
 import { apiService } from '../../services/apiService';
 import Modal from '../../components/Modal';
-import { EditIcon, TrashIcon, DownloadIcon, UploadIcon, PlusCircleIcon } from '../../components/Icons';
+import { EditIcon, TrashIcon, DownloadIcon, UploadIcon, PlusCircleIcon, FingerprintIcon } from '../../components/Icons';
 
 const InputField: React.FC<React.InputHTMLAttributes<HTMLInputElement> & { label: string }> = ({ label, ...props}) => (
     <div>
@@ -312,6 +312,8 @@ export const EmployeesTab: React.FC<{employees: UserProfile[], allSeksi: Seksi[]
     const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
     const [editingProfile, setEditingProfile] = useState<UserProfile | null>(null);
     const [deletingProfile, setDeletingProfile] = useState<UserProfile | null>(null);
+    const [isResetModalOpen, setIsResetModalOpen] = useState(false);
+    const [resettingProfile, setResettingProfile] = useState<UserProfile | null>(null);
 
     const handleAddClick = () => {
         setEditingProfile(null);
@@ -328,12 +330,31 @@ export const EmployeesTab: React.FC<{employees: UserProfile[], allSeksi: Seksi[]
         setIsDeleteModalOpen(true);
     };
 
+    const handleResetClick = (profile: UserProfile) => {
+        setResettingProfile(profile);
+        setIsResetModalOpen(true);
+    };
+
     const handleConfirmDelete = async () => {
         if (deletingProfile) {
             await apiService.deleteUserProfile(deletingProfile.id);
             setIsDeleteModalOpen(false);
             setDeletingProfile(null);
             onDataChange();
+        }
+    };
+    
+    const handleConfirmReset = async () => {
+        if (resettingProfile) {
+            try {
+                await apiService.resetFingerprintForUser(resettingProfile.id);
+            } catch (error) {
+                console.error('Failed to reset fingerprint:', error);
+                // Optionally show an error message to the user
+            } finally {
+                setIsResetModalOpen(false);
+                setResettingProfile(null);
+            }
         }
     };
 
@@ -403,6 +424,7 @@ export const EmployeesTab: React.FC<{employees: UserProfile[], allSeksi: Seksi[]
                                     <div className="flex gap-2">
                                         <button onClick={() => handleEditClick(e)} className="text-blue-600 hover:text-blue-800" title="Ubah"><EditIcon className="w-4 h-4"/></button>
                                         <button onClick={() => handleDeleteClick(e)} className="text-red-600 hover:text-red-800" title="Hapus"><TrashIcon className="w-4 h-4"/></button>
+                                        <button onClick={() => handleResetClick(e)} className="text-gray-600 hover:text-gray-800" title="Reset Perangkat"><FingerprintIcon className="w-4 h-4"/></button>
                                     </div>
                                 </td>
                             </tr>
@@ -442,6 +464,16 @@ export const EmployeesTab: React.FC<{employees: UserProfile[], allSeksi: Seksi[]
                         onDataChange();
                     }}
                 />
+            )}
+
+            {isResetModalOpen && resettingProfile && (
+                <Modal isOpen={isResetModalOpen} onClose={() => setIsResetModalOpen(false)} title="Konfirmasi Reset Perangkat">
+                    <p>Apakah Anda yakin ingin mereset perangkat terdaftar untuk <strong>{resettingProfile.name}</strong>? Tindakan ini akan mengizinkan pegawai untuk mendaftarkan perangkat baru saat mereka melakukan absensi berikutnya.</p>
+                    <div className="flex justify-end gap-3 pt-4 mt-4">
+                        <button onClick={() => setIsResetModalOpen(false)} className="bg-white py-2 px-4 border border-slate-300 rounded-md shadow-sm text-sm font-medium text-slate-700 hover:bg-slate-50">Batal</button>
+                        <button onClick={handleConfirmReset} className="bg-blue-600 py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white hover:bg-blue-700">Reset</button>
+                    </div>
+                </Modal>
             )}
         </div>
     );
