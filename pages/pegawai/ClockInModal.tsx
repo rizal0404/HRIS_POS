@@ -5,6 +5,9 @@ import Modal from '../../components/Modal';
 import { MapContainer, TileLayer, Marker, Circle, useMap, Popup } from 'react-leaflet';
 import L from 'leaflet';
 
+// Declare FingerprintJS as a global variable from the CDN script
+declare const FingerprintJS: any;
+
 // Fix for default marker icon in react-leaflet
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -85,6 +88,8 @@ export const ClockInModal: React.FC<ClockInModalProps> = ({isOpen, onClose, onSu
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [distance, setDistance] = useState<number | null>(null);
     const [isMockDetected, setIsMockDetected] = useState<boolean>(false);
+    const [fingerprintId, setFingerprintId] = useState<string | null>(null);
+
 
     // Form state
     const [workLocation, setWorkLocation] = useState('Bekerja di Pabrik');
@@ -142,6 +147,20 @@ export const ClockInModal: React.FC<ClockInModalProps> = ({isOpen, onClose, onSu
     useEffect(() => {
         if (isOpen) {
             fetchLocation();
+
+            // Generate fingerprint
+            const getFingerprint = async () => {
+                try {
+                    const fp = await FingerprintJS.load();
+                    const result = await fp.get();
+                    setFingerprintId(result.visitorId);
+                } catch (error) {
+                    console.error('FingerprintJS error:', error);
+                    setLocationError('Gagal memuat sistem keamanan perangkat. Refresh dan coba lagi.');
+                }
+            };
+            getFingerprint();
+
             const timerId = setInterval(() => setCurrentTime(new Date()), 1000);
             return () => clearInterval(timerId);
         }
@@ -162,6 +181,7 @@ export const ClockInModal: React.FC<ClockInModalProps> = ({isOpen, onClose, onSu
     const isActionDisabled = useMemo(() => {
         if (isMockDetected) return true;
         if (isSubmitting) return true;
+        if (!fingerprintId) return true; // Disable if fingerprint is not yet generated
         
         if (workLocation === 'Bekerja di Pabrik') {
             if (isFetchingLocation || !position || locationError) return true;
@@ -174,12 +194,15 @@ export const ClockInModal: React.FC<ClockInModalProps> = ({isOpen, onClose, onSu
             if (isFetchingLocation || !position || locationError) return true; // Still need location data to record
         }
         return false;
-    }, [isSubmitting, workLocation, isFetchingLocation, position, locationError, distance, isMockDetected, notes]);
+    }, [isSubmitting, workLocation, isFetchingLocation, position, locationError, distance, isMockDetected, notes, fingerprintId]);
 
 
     const locationMessage = () => {
         if (isMockDetected) {
             return { text: locationError || "Lokasi tidak wajar terdeteksi. Absensi tidak dapat dilanjutkan.", color: "bg-red-100 text-red-800" };
+        }
+        if (!fingerprintId) {
+             return { text: "Menginisialisasi keamanan perangkat...", color: "bg-blue-50 text-blue-800" };
         }
 
         const accuracy = position?.coords.accuracy ?? 0;
@@ -200,8 +223,8 @@ export const ClockInModal: React.FC<ClockInModalProps> = ({isOpen, onClose, onSu
     };
 
     const handleSubmit = async () => {
-        if (isActionDisabled) {
-             onError('Kondisi tidak memenuhi syarat.');
+        if (isActionDisabled || !fingerprintId) {
+             onError('Kondisi tidak memenuhi syarat atau sidik jari perangkat tidak valid.');
              return;
         }
         setIsSubmitting(true);
@@ -212,7 +235,7 @@ export const ClockInModal: React.FC<ClockInModalProps> = ({isOpen, onClose, onSu
                 await apiService.submitClockEvent(user, actionType, {
                     workLocationType: workLocation,
                     workplace,
-                    notes, position, todaySchedule
+                    notes, position, todaySchedule, fingerprintId
                 });
                 onSuccess(`${actionType === 'in' ? 'Clock In' : 'Clock Out'} berhasil!`);
             } else { // workLocation === 'Lainnya'

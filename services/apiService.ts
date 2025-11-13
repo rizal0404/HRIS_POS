@@ -592,6 +592,24 @@ export const apiService = {
     return { ...resultData, id: String(resultData.id), tanggal: formatDateFromSupabase(resultData.tanggal) };
   },
 
+  // --- FINGERPRINTING ---
+  getFingerprintForUser: async (userId: string): Promise<{ fingerprint_id: string } | null> => {
+    const { data, error } = await supabase.from('user_device_fingerprints').select('fingerprint_id').eq('user_id', userId).single();
+    if (error && error.code === '42P01') { // undefined_table
+        throw new Error("Tabel 'user_device_fingerprints' tidak ditemukan. Silakan lihat README.md untuk instruksi setup database.");
+    }
+    handleSupabaseError(error, 'getFingerprintForUser');
+    return data;
+  },
+
+  setFingerprintForUser: async (userId: string, fingerprintId: string): Promise<void> => {
+    const { error } = await supabase.from('user_device_fingerprints').insert({ user_id: userId, fingerprint_id: fingerprintId });
+    if (error && error.code === '42P01') { // undefined_table
+      throw new Error("Tabel 'user_device_fingerprints' tidak ditemukan. Fitur keamanan perangkat dinonaktifkan. Silakan lihat README.md untuk instruksi setup database.");
+    }
+    handleSupabaseError(error, 'setFingerprintForUser');
+  },
+
   // --- PRESENSI (LIVE DATA) ---
   getAllPresensi: async (): Promise<Presensi[]> => {
     const { data, error } = await supabase.from('presensi').select('*');
@@ -614,9 +632,19 @@ export const apiService = {
   },
   
   submitClockEvent: async (user: UserProfile, action: 'in' | 'out', data: any): Promise<void> => {
-    const { position, todaySchedule, ...formData } = data;
-    const todayYYYYMMDD = new Date().toISOString().split('T')[0];
+    const { position, todaySchedule, fingerprintId, ...formData } = data;
+
+    // Fingerprint check only for 'Bekerja di Pabrik'
+    if (formData.workLocationType === 'Bekerja di Pabrik') {
+        const storedFingerprint = await apiService.getFingerprintForUser(user.id);
+        if (storedFingerprint) {
+            if (storedFingerprint.fingerprint_id !== fingerprintId) {
+                throw new Error("Perangkat tidak dikenali. Silakan gunakan perangkat yang biasa Anda gunakan untuk absen untuk mencegah penyalahgunaan akun.");
+            }
+        }
+    }
     
+    const todayYYYYMMDD = new Date().toISOString().split('T')[0];
     const { data: existingRecord, error: fetchError } = await supabase.from('presensi').select('*').eq('nik', user.nik).eq('tanggal', todayYYYYMMDD).maybeSingle();
     if (fetchError && fetchError.code === '42P01') {
         const userMessage = "Tabel 'presensi' tidak ditemukan. Gagal menyimpan data presensi. Silakan hubungi administrator untuk membuat tabel di database.";
@@ -662,6 +690,14 @@ export const apiService = {
       };
       const { error } = await supabase.from('presensi').update(payload).eq('id', existingRecord.id);
       handleSupabaseError(error, 'submitClockEvent (clock-out)');
+    }
+
+    // After successful clock event for 'Bekerja di Pabrik', bind fingerprint if it doesn't exist
+    if (formData.workLocationType === 'Bekerja di Pabrik') {
+        const storedFingerprint = await apiService.getFingerprintForUser(user.id);
+        if (!storedFingerprint) {
+            await apiService.setFingerprintForUser(user.id, fingerprintId);
+        }
     }
   },
 
