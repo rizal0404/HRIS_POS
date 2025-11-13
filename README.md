@@ -154,6 +154,10 @@ ON public.user_device_fingerprints FOR SELECT
 TO authenticated
 USING ((SELECT role FROM public.user_profiles WHERE id = auth.uid()) IN ('Admin', 'SuperAdmin'));
 
+CREATE POLICY "Allow managers and admins to delete fingerprints"
+ON public.user_device_fingerprints FOR DELETE
+TO authenticated
+USING ((SELECT role FROM public.user_profiles WHERE id = auth.uid()) IN ('Manager', 'Admin', 'SuperAdmin'));
 ```
 </details>
 
