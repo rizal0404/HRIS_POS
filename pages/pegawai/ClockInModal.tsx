@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { UserProfile, JadwalKerja } from '../../types';
+import { UserProfile, JadwalKerja, UsulanJenis, UsulanStatus } from '../../types';
 import { apiService } from '../../services/apiService';
 import Modal from '../../components/Modal';
 import { MapContainer, TileLayer, Marker, Circle, useMap, Popup } from 'react-leaflet';
@@ -33,6 +33,7 @@ const WORKPLACES = [
   { name: 'Tonasa 5', lat: -4.790931202719051, lon: 119.61694886888938 },
   { name: 'Crusher', lat: -4.7893251806455295, lon: 119.62039780223822 },
   { name: 'Kantor Staf', lat: -4.788360643865878, lon: 119.61309925103656 },
+  { name: 'Palmer', lat: -4.799717216, lon: 119.60308636409 },
 ];
 const MAX_DISTANCE_METERS = 350;
 const DEFAULT_MAP_CENTER: [number, number] = [-4.819, 119.640];
@@ -83,9 +84,9 @@ export const ClockInModal: React.FC<ClockInModalProps> = ({isOpen, onClose, onSu
     const [isFetchingLocation, setIsFetchingLocation] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [distance, setDistance] = useState<number | null>(null);
+    const [isMockDetected, setIsMockDetected] = useState<boolean>(false);
 
     // Form state
-    const [healthStatus, setHealthStatus] = useState('Sehat');
     const [workLocation, setWorkLocation] = useState('Bekerja di Pabrik');
     const [workplace, setWorkplace] = useState(WORKPLACES[0].name);
     const [notes, setNotes] = useState('');
@@ -101,8 +102,38 @@ export const ClockInModal: React.FC<ClockInModalProps> = ({isOpen, onClose, onSu
     const fetchLocation = useCallback(() => {
         setIsFetchingLocation(true);
         setLocationError(null);
+        setIsMockDetected(false); // Reset on new fetch
         navigator.geolocation.getCurrentPosition(
-            (pos) => { setPosition(pos); setIsFetchingLocation(false); },
+            (pos) => {
+                const { latitude, longitude, accuracy, altitude } = pos.coords;
+                const reasons: string[] = [];
+
+                // 1. Check for unnaturally high coordinate precision
+                const latDecimals = String(latitude).split('.')[1]?.length || 0;
+                const lonDecimals = String(longitude).split('.')[1]?.length || 0;
+                if (latDecimals > 8 || lonDecimals > 8) {
+                    reasons.push("presisi koordinat tinggi");
+                }
+
+                // 2. Check for "perfect" integer accuracy values (e.g., 5.0, 10.0)
+                if (Number.isInteger(accuracy) && accuracy > 0) {
+                    reasons.push("nilai akurasi tidak wajar");
+                }
+
+                // 3. Check for "perfect" integer altitude values
+                if (altitude !== null && Number.isInteger(altitude)) {
+                    reasons.push("nilai ketinggian tidak wajar");
+                }
+
+                // If a combination of suspicious factors is found (at least 2), flag as mock.
+                if (reasons.length >= 2) {
+                    setIsMockDetected(true);
+                    setLocationError(`Kemungkinan lokasi palsu terdeteksi (90%): ${reasons.join(', ')}. Harap matikan aplikasi mock location.`);
+                }
+                
+                setPosition(pos);
+                setIsFetchingLocation(false);
+            },
             (err) => { setLocationError(err.message); setIsFetchingLocation(false); },
             { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
         );
@@ -129,16 +160,28 @@ export const ClockInModal: React.FC<ClockInModalProps> = ({isOpen, onClose, onSu
     }, [position, selectedWorkplaceDetails]);
 
     const isActionDisabled = useMemo(() => {
+        if (isMockDetected) return true;
         if (isSubmitting) return true;
+        
         if (workLocation === 'Bekerja di Pabrik') {
             if (isFetchingLocation || !position || locationError) return true;
             if (position.coords.accuracy > ACCURACY_THRESHOLD_METERS) return true;
             if (distance === null || distance > MAX_DISTANCE_METERS) return true;
         }
+
+        if (workLocation === 'Lainnya') {
+            if (!notes.trim()) return true; // Notes are required
+            if (isFetchingLocation || !position || locationError) return true; // Still need location data to record
+        }
         return false;
-    }, [isSubmitting, workLocation, isFetchingLocation, position, locationError, distance]);
+    }, [isSubmitting, workLocation, isFetchingLocation, position, locationError, distance, isMockDetected, notes]);
+
 
     const locationMessage = () => {
+        if (isMockDetected) {
+            return { text: locationError || "Lokasi tidak wajar terdeteksi. Absensi tidak dapat dilanjutkan.", color: "bg-red-100 text-red-800" };
+        }
+
         const accuracy = position?.coords.accuracy ?? 0;
         const isAccuracyLow = accuracy > ACCURACY_THRESHOLD_METERS;
 
@@ -148,7 +191,7 @@ export const ClockInModal: React.FC<ClockInModalProps> = ({isOpen, onClose, onSu
             if (isAccuracyLow) {
                  return { text: `Akurasi rendah (${accuracy.toFixed(0)}m). Coba ke area lebih terbuka.`, color: "bg-orange-100 text-orange-800" };
             }
-            if (distance !== null && distance > MAX_DISTANCE_METERS) {
+            if (workLocation === 'Bekerja di Pabrik' && distance !== null && distance > MAX_DISTANCE_METERS) {
                 return { text: `Jarak Anda ${distance.toFixed(0)}m. Anda harus dalam radius ${MAX_DISTANCE_METERS}m untuk clock-in.`, color: "bg-red-100 text-red-800" };
             }
             return { text: `Lokasi Anda dengan akurasi ${accuracy.toFixed(2)} meter.`, color: "bg-green-50 text-green-800" };
@@ -158,18 +201,41 @@ export const ClockInModal: React.FC<ClockInModalProps> = ({isOpen, onClose, onSu
 
     const handleSubmit = async () => {
         if (isActionDisabled) {
-             onError('Kondisi lokasi tidak memenuhi syarat.');
+             onError('Kondisi tidak memenuhi syarat.');
              return;
         }
         setIsSubmitting(true);
         try {
             if (!todaySchedule) throw new Error("Jadwal kerja untuk hari ini tidak ditemukan.");
-            await apiService.submitClockEvent(user, actionType, {
-                healthStatus, workLocationType: workLocation,
-                workplace: workLocation === 'Bekerja di Pabrik' ? workplace : undefined,
-                notes, position, todaySchedule
-            });
-            onSuccess(`${actionType === 'in' ? 'Clock In' : 'Clock Out'} berhasil!`);
+            
+            if (workLocation === 'Bekerja di Pabrik') {
+                await apiService.submitClockEvent(user, actionType, {
+                    workLocationType: workLocation,
+                    workplace,
+                    notes, position, todaySchedule
+                });
+                onSuccess(`${actionType === 'in' ? 'Clock In' : 'Clock Out'} berhasil!`);
+            } else { // workLocation === 'Lainnya'
+                const today = new Date();
+                const tanggalPembetulan = today.toISOString().split('T')[0]; // YYYY-MM-DD
+                const jamPembetulan = today.toTimeString().split(' ')[0].substring(0, 5); // HH:mm
+
+                await apiService.addPembetulanPresensi({
+                    nik: user.nik,
+                    nama: user.name,
+                    seksi: user.seksi,
+                    rolePengaju: user.role,
+                    managerId: user.managerId,
+                    status: UsulanStatus.Diajukan,
+                    jenisAjuan: UsulanJenis.PembetulanPresensi,
+                    tanggalPembetulan: tanggalPembetulan,
+                    jamPembetulan: jamPembetulan,
+                    clockType: actionType,
+                    alasan: notes,
+                });
+                onSuccess(`Ajuan clock-${actionType} dari lokasi 'Lainnya' telah dikirim untuk persetujuan.`);
+            }
+
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : "Terjadi kesalahan.";
             onError(errorMessage);
@@ -218,19 +284,12 @@ export const ClockInModal: React.FC<ClockInModalProps> = ({isOpen, onClose, onSu
                     <p className="font-mono text-2xl font-bold tracking-wider">{currentTime.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' })} WIB</p>
                      <p className="text-xs text-slate-500">{new Date().toString()}</p>
                 </div>
-                <div>
-                    <label htmlFor="healthStatus" className="block text-sm font-medium text-slate-700">Kondisi Kesehatan Anda Saat Ini</label>
-                    <select id="healthStatus" value={healthStatus} onChange={e => setHealthStatus(e.target.value)} className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-slate-300 rounded-md">
-                        <option>Sehat</option>
-                        <option>Kurang Sehat</option>
-                    </select>
-                </div>
+                
                 <div>
                     <label htmlFor="workLocation" className="block text-sm font-medium text-slate-700">Lokasi Kerja Anda Hari Ini</label>
                     <select id="workLocation" value={workLocation} onChange={e => setWorkLocation(e.target.value)} className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-slate-300 rounded-md">
                         <option>Bekerja di Pabrik</option>
-                        <option>Bekerja di Rumah</option>
-                        <option>Perjalanan Dinas</option>
+                        <option>Lainnya</option>
                     </select>
                 </div>
                 {workLocation === 'Bekerja di Pabrik' && (
@@ -242,13 +301,23 @@ export const ClockInModal: React.FC<ClockInModalProps> = ({isOpen, onClose, onSu
                     </div>
                 )}
                  <div>
-                    <label htmlFor="notes" className="block text-sm font-medium text-slate-700">Catatan/Alasan</label>
-                    <textarea id="notes" value={notes} onChange={e => setNotes(e.target.value)} rows={2} className="mt-1 block w-full shadow-sm sm:text-sm border-slate-300 rounded-md" />
+                    <label htmlFor="notes" className="block text-sm font-medium text-slate-700">
+                        Catatan/Alasan
+                        {workLocation === 'Lainnya' && <span className="text-red-500">*</span>}
+                    </label>
+                    <textarea 
+                        id="notes" 
+                        value={notes} 
+                        onChange={e => setNotes(e.target.value)} 
+                        rows={2} 
+                        className="mt-1 block w-full shadow-sm sm:text-sm border-slate-300 rounded-md" 
+                        required={workLocation === 'Lainnya'}
+                    />
                 </div>
                  <div className="flex justify-end gap-3 pt-4">
                     <button type="button" onClick={onClose} className="bg-slate-400 py-2 px-6 border border-transparent rounded-md shadow-sm text-sm font-medium text-white hover:bg-slate-500">Batal</button>
                     <button type="button" onClick={handleSubmit} disabled={isActionDisabled} className={`py-2 px-6 border border-transparent rounded-md shadow-sm text-sm font-medium text-white transition-colors ${actionType === 'in' ? 'bg-green-500 hover:bg-green-600' : 'bg-red-500 hover:bg-red-600'} disabled:bg-slate-300 disabled:cursor-not-allowed`}>
-                        {isSubmitting ? 'Memproses...' : title}
+                        {isSubmitting ? 'Memproses...' : (workLocation === 'Lainnya' ? 'Kirim Ajuan' : title)}
                     </button>
                 </div>
             </div>
