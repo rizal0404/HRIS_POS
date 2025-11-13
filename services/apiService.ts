@@ -56,6 +56,20 @@ const formatTimestampForComponents = (isoString: string | null): string => {
     return `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`;
 };
 
+const formatApprovalTimestamp = (isoString: string | null): string => {
+    if (!isoString) return '';
+    try {
+        const date = new Date(isoString);
+        if (isNaN(date.getTime())) return ''; // Invalid date
+        const datePart = date.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+        const timePart = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }).replace(':', '.');
+        return `${datePart} - ${timePart}`;
+    } catch (e) {
+        console.error("Error formatting approval timestamp:", isoString, e);
+        return '';
+    }
+};
+
 
 // Helper function to map snake_case from user_profiles DB to camelCase for frontend
 function mapProfileToCamelCase(dbProfile: any): UserProfile | null {
@@ -117,6 +131,7 @@ function mapCutiToCamelCase(dbCuti: any): UsulanCuti {
         nama: dbCuti.nama,
         seksi: dbCuti.seksi,
         status: dbCuti.status,
+        approvalTimestamp: formatApprovalTimestamp(dbCuti.approval_timestamp),
         catatanAdmin: dbCuti.catatan_admin,
         rolePengaju: dbCuti.role_pengaju,
         managerId: dbCuti.manager_id,
@@ -142,6 +157,7 @@ function mapLemburToCamelCase(dbLembur: any): UsulanLembur {
         nama: dbLembur.nama,
         seksi: dbLembur.seksi,
         status: dbLembur.status,
+        approvalTimestamp: formatApprovalTimestamp(dbLembur.approval_timestamp),
         catatanAdmin: dbLembur.catatan_admin,
         rolePengaju: dbLembur.role_pengaju,
         managerId: dbLembur.manager_id,
@@ -166,6 +182,7 @@ function mapSubstitusiToCamelCase(dbSubstitusi: any): UsulanSubstitusi {
         nama: dbSubstitusi.nama,
         seksi: dbSubstitusi.seksi,
         status: dbSubstitusi.status,
+        approvalTimestamp: formatApprovalTimestamp(dbSubstitusi.approval_timestamp),
         catatanAdmin: dbSubstitusi.catatan_admin,
         rolePengaju: dbSubstitusi.role_pengaju,
         managerId: dbSubstitusi.manager_id,
@@ -186,6 +203,7 @@ function mapPembetulanToCamelCase(dbItem: any): UsulanPembetulanPresensi {
         nama: dbItem.nama,
         seksi: dbItem.seksi,
         status: dbItem.status,
+        approvalTimestamp: formatApprovalTimestamp(dbItem.approval_timestamp),
         catatanAdmin: dbItem.catatan_admin,
         rolePengaju: dbItem.role_pengaju,
         managerId: dbItem.manager_id,
@@ -908,7 +926,10 @@ USING ((SELECT role FROM public.user_profiles WHERE id = auth.uid()) IN ('Manage
         pembetulan: 'usulan_pembetulan_presensi',
       };
       const tableName = tableNameMap[type];
-      const payload: { status: UsulanStatus, catatan_admin?: string } = { status };
+      const payload: { status: UsulanStatus, catatan_admin?: string, approval_timestamp?: string } = {
+          status,
+          approval_timestamp: new Date().toISOString()
+      };
       if (catatanAdmin) {
           payload.catatan_admin = catatanAdmin;
       }

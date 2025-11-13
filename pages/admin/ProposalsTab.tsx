@@ -191,6 +191,7 @@ export const ProposalsTab: React.FC<{
                             <th className="px-4 py-3">Keterangan</th>
                             <th className="px-4 py-3">Pengganti</th>
                             <th className="px-4 py-3">Status</th>
+                            <th className="px-4 py-3">Waktu Approval</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -226,6 +227,9 @@ export const ProposalsTab: React.FC<{
                                             'bg-yellow-100 text-yellow-800'}`}>
                                             {p.status}
                                         </span>
+                                    </td>
+                                    <td className="px-4 py-3 cursor-pointer" onClick={() => onViewDetails(p)}>
+                                        {p.approvalTimestamp || '-'}
                                     </td>
                                 </tr>
                             )

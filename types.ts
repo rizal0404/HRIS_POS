@@ -70,6 +70,7 @@ export interface BaseUsulan {
   nama: string;
   seksi: string;
   status: UsulanStatus;
+  approvalTimestamp?: string;
   catatanAdmin?: string;
   rolePengaju: UserRole;
   managerId?: string; // ID of the manager who needs to approve
