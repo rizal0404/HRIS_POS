@@ -3,6 +3,130 @@ import { UsulanCuti, UserProfile, UsulanJenis, UsulanStatus, JadwalKerja } from 
 import { PlusIcon, FileTextIcon, SearchIcon, FilterXIcon, EyeIcon, XIcon, UsersIcon, ChevronLeftIcon } from '../../components/Icons';
 import { TambahPengajuanCutiView } from './TambahPengajuanCutiView';
 
+// --- NEW READ-ONLY DETAIL MODAL ---
+
+const formatDetailTimestamp = (timestampStr: string): string => {
+    if (!timestampStr) return 'N/A';
+    const parts = timestampStr.match(/(\d{2})\/(\d{2})\/(\d{4}) (\d{2}):(\d{2}):(\d{2})/);
+    if (!parts) return timestampStr;
+    const [, day, month, year, hour, minute] = parts;
+    const date = new Date(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute));
+    const datePart = date.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+    const timePart = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }).replace(':', '.');
+    return `${datePart} - ${timePart}`;
+};
+
+const formatDetailDate = (dateStr: string) => {
+    if (!dateStr) return 'N/A';
+    const date = new Date(dateStr + 'T00:00:00');
+    return date.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+};
+
+const countLeaveDays = (startDateStr: string, endDateStr: string): number => {
+    const start = new Date(startDateStr + 'T00:00:00');
+    const end = new Date(endDateStr + 'T00:00:00');
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) return 0;
+    const diffTime = Math.abs(end.getTime() - start.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+    return diffDays;
+};
+
+const getStatusBadgeForDetail = (status: UsulanStatus, sap: boolean = false) => {
+    if (sap) {
+        return status === UsulanStatus.Disetujui 
+            ? <span className="px-2 py-1 text-xs font-semibold rounded bg-green-500 text-white">Sukses</span>
+            : <span className="px-2 py-1 text-xs font-semibold rounded bg-gray-500 text-white">Pending</span>;
+    }
+    switch (status) {
+        case UsulanStatus.Disetujui: return <span className="px-2 py-1 text-xs font-semibold rounded bg-green-500 text-white">Approved</span>;
+        case UsulanStatus.Ditolak: return <span className="px-2 py-1 text-xs font-semibold rounded bg-red-500 text-white">Ditolak</span>;
+        case UsulanStatus.Revisi: return <span className="px-2 py-1 text-xs font-semibold rounded bg-yellow-500 text-white">Revisi</span>;
+        case UsulanStatus.Diajukan:
+        default: return <span className="px-2 py-1 text-xs font-semibold rounded bg-blue-500 text-white">Diajukan</span>;
+    }
+};
+
+const DetailItem: React.FC<{ label: string; value: React.ReactNode; className?: string; }> = ({ label, value, className = '' }) => (
+    <div className={className}>
+        <p className="text-xs text-gray-500">{label}</p>
+        <p className="text-sm font-semibold text-gray-800 break-words">{value}</p>
+    </div>
+);
+
+const CutiDetailModal: React.FC<{
+    isOpen: boolean;
+    onClose: () => void;
+    proposal: UsulanCuti;
+    allPegawai: UserProfile[];
+}> = ({ isOpen, onClose, proposal, allPegawai }) => {
+    if (!isOpen) return null;
+
+    const approver = allPegawai.find(p => p.id === proposal.managerId);
+    
+    // Fallback logic for approver name if manager relationship is not set/found
+    const approverName = approver ? `${approver.name}, ST.` : 'Atasan terkait';
+
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex justify-center items-center p-4">
+            <div className="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col">
+                <header className="px-6 py-4 border-b flex justify-between items-center">
+                    <h3 className="text-lg font-bold text-gray-800">Lihat Data</h3>
+                    <button onClick={onClose} className="text-gray-500 hover:text-gray-800" aria-label="Close modal">
+                        <XIcon className="w-5 h-5"/>
+                    </button>
+                </header>
+                
+                <main className="p-6 overflow-y-auto space-y-6">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 border-b pb-4">
+                        <DetailItem label="Waktu Permintaan" value={formatDetailTimestamp(proposal.timestamp)} />
+                        <DetailItem label="Jenis Cuti/Dispensasi" value={proposal.jenisAjuan} />
+                        <DetailItem label="Keperluan / Alamat" value={proposal.keterangan} />
+                        <DetailItem label="Lokasi" value={"Pkp-makassar"} />
+                        <div/>
+                        <div/>
+                        <DetailItem label="Status Pengajuan" value={getStatusBadgeForDetail(proposal.status)} />
+                        <DetailItem label="Status SAP" value={getStatusBadgeForDetail(proposal.status, true)} />
+                    </div>
+
+                    <div>
+                        <h4 className="font-bold text-gray-700 mb-2">Rincian</h4>
+                        <div className="overflow-x-auto border rounded-md">
+                             <table className="min-w-full text-sm">
+                                <thead className="bg-gray-50 text-left">
+                                    <tr>
+                                        <th className="px-4 py-2 font-semibold">Tanggal Mulai</th>
+                                        <th className="px-4 py-2 font-semibold">Tanggal Akhir</th>
+                                        <th className="px-4 py-2 font-semibold">Jumlah Hari</th>
+                                        <th className="px-4 py-2 font-semibold">Dibuat Oleh</th>
+                                        <th className="px-4 py-2 font-semibold">Disetujui Oleh</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="bg-white">
+                                    <tr>
+                                        <td className="px-4 py-2 border-t">{formatDetailDate(proposal.periode.startDate)}</td>
+                                        <td className="px-4 py-2 border-t">{formatDetailDate(proposal.periode.endDate)}</td>
+                                        <td className="px-4 py-2 border-t">{countLeaveDays(proposal.periode.startDate, proposal.periode.endDate)}</td>
+                                        <td className="px-4 py-2 border-t">{proposal.nama}</td>
+                                        <td className="px-4 py-2 border-t">{approverName}</td>
+                                    </tr>
+                                </tbody>
+                             </table>
+                        </div>
+                    </div>
+                </main>
+
+                <footer className="px-6 py-4 border-t flex justify-end">
+                    <button onClick={onClose} className="bg-gray-200 text-gray-800 font-bold py-2 px-6 rounded-md hover:bg-gray-300 transition-colors">
+                        Kembali
+                    </button>
+                </footer>
+            </div>
+        </div>
+    );
+};
+
+// --- END OF NEW COMPONENT ---
+
 const parseAndFormatDateOnly = (timestampStr: string): string => {
     if (!timestampStr) return 'Invalid Date';
     // Handle DD/MM/YYYY format, ignoring time part
@@ -329,15 +453,15 @@ export const CutiView: React.FC<{
     const [activeTab, setActiveTab] = useState(initialTab);
     const [view, setView] = useState<'list' | 'form'>('list');
     const [proposalToEdit, setProposalToEdit] = useState<UsulanCuti | null>(null);
+    const [viewingCutiDetails, setViewingCutiDetails] = useState<UsulanCuti | null>(null);
 
     const handleBuatAjuan = () => {
         setProposalToEdit(null);
         setView('form');
     };
 
-    const handleViewAjuan = (proposal: UsulanCuti) => {
-        setProposalToEdit(proposal);
-        setView('form');
+    const handleViewDetails = (proposal: UsulanCuti) => {
+        setViewingCutiDetails(proposal);
     };
 
     const handleBackFromForm = () => {
@@ -386,7 +510,7 @@ export const CutiView: React.FC<{
                             usulanCuti={usulanCuti} 
                             allPegawai={allPegawai} 
                             onBuatAjuan={handleBuatAjuan} 
-                            onViewAjuan={handleViewAjuan} 
+                            onViewAjuan={handleViewDetails} 
                             onDeleteAjuan={onDeleteAjuan}
                         />
                     )}
@@ -405,6 +529,15 @@ export const CutiView: React.FC<{
                     onSuccess={handleSuccessFromForm}
                     onBack={handleBackFromForm}
                     proposalToEdit={proposalToEdit}
+                />
+            )}
+
+            {viewingCutiDetails && (
+                <CutiDetailModal
+                    isOpen={!!viewingCutiDetails}
+                    onClose={() => setViewingCutiDetails(null)}
+                    proposal={viewingCutiDetails}
+                    allPegawai={allPegawai}
                 />
             )}
         </div>
