@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { UserProfile, JadwalKerja, UsulanCuti, UsulanLembur, Usulan, ShiftConfig, Presensi, UsulanSubstitusi, Seksi, UnitKerja, VendorConfig, UsulanPembetulanPresensi, LeaveQuota, UserRole, UsulanJenis, UsulanStatus } from '../types';
 import { apiService } from '../services/apiService';
 
 // Icons
-import { HomeIcon, UsersIcon, FileTextIcon, CogIcon, GridIcon, LogOutIcon, MenuIcon, SearchIcon, CalendarIcon, ClockIcon, SitemapIcon, PlaneIcon, XIcon, ArrowLeftRightIcon, UserCheckIcon, UserIcon } from '../components/Icons';
+import { HomeIcon, UsersIcon, FileTextIcon, CogIcon, GridIcon, LogOutIcon, MenuIcon, SearchIcon, CalendarIcon, ClockIcon, SitemapIcon, PlaneIcon, XIcon, ArrowLeftRightIcon, UserCheckIcon, UserIcon, BellIcon, AlertTriangleIcon } from '../components/Icons';
 
 // Tab components
 import { DashboardTab } from './admin/DashboardTab';
@@ -139,7 +139,66 @@ const Sidebar: React.FC<{
   );
 };
 
-const TopBar: React.FC<{ onToggleSidebar: () => void; user: UserProfile | null; onLogout: () => void; }> = ({ onToggleSidebar, user, onLogout }) => {
+const parseCustomTimestamp = (ts: string): Date => {
+    const parts = ts.match(/(\d{2})\/(\d{2})\/(\d{4}) (\d{2}):(\d{2}):(\d{2})/);
+    if (!parts) return new Date(0); // fallback to a very old date
+    const [, day, month, year, hour, minute, second] = parts;
+    return new Date(parseInt(year), parseInt(month) - 1, parseInt(day), parseInt(hour), parseInt(minute), parseInt(second));
+};
+
+const timeSince = (date: Date): string => {
+    const seconds = Math.floor((new Date().getTime() - date.getTime()) / 1000);
+    let interval = seconds / 31536000;
+    if (interval > 1) return Math.floor(interval) + " tahun lalu";
+    interval = seconds / 2592000;
+    if (interval > 1) return Math.floor(interval) + " bulan lalu";
+    interval = seconds / 86400;
+    if (interval > 1) return Math.floor(interval) + " hari lalu";
+    interval = seconds / 3600;
+    if (interval > 1) return Math.floor(interval) + " jam lalu";
+    interval = seconds / 60;
+    if (interval > 1) return Math.floor(interval) + " menit lalu";
+    return "Baru saja";
+};
+
+const TopBar: React.FC<{ 
+  onToggleSidebar: () => void; 
+  user: UserProfile | null; 
+  onLogout: () => void;
+  notifications: Usulan[];
+  onNotificationClick: (proposal: Usulan) => void;
+}> = ({ onToggleSidebar, user, onLogout, notifications, onNotificationClick }) => {
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const notificationRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (notificationRef.current && !notificationRef.current.contains(event.target as Node)) {
+        setIsNotificationsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [notificationRef]);
+  
+  const getNotificationIcon = (jenis: UsulanJenis) => {
+    switch(jenis) {
+      case UsulanJenis.CutiTahunan:
+      case UsulanJenis.IzinSakit:
+        return <CalendarIcon className="w-5 h-5 text-blue-500" />;
+      case UsulanJenis.Lembur:
+        return <ClockIcon className="w-5 h-5 text-orange-500" />;
+      case UsulanJenis.Substitusi:
+        return <ArrowLeftRightIcon className="w-5 h-5 text-purple-500" />;
+      case UsulanJenis.PembetulanPresensi:
+        return <UserCheckIcon className="w-5 h-5 text-teal-500" />;
+      default:
+        return <FileTextIcon className="w-5 h-5 text-gray-500" />;
+    }
+  }
+
   return (
     <header className="bg-white h-16 flex items-center justify-between px-4 sm:px-6 border-b shrink-0 sticky top-0 z-30">
         <div className="flex items-center gap-4">
@@ -150,6 +209,43 @@ const TopBar: React.FC<{ onToggleSidebar: () => void; user: UserProfile | null; 
         </div>
       
         <div className="flex items-center gap-4">
+            <div className="relative" ref={notificationRef}>
+              <button onClick={() => setIsNotificationsOpen(prev => !prev)} className="text-gray-500 hover:text-gray-700 relative" aria-label="Notifikasi">
+                  <BellIcon className="w-6 h-6" />
+                  {notifications.length > 0 && (
+                    <span className="absolute -top-1 -right-1 flex h-4 w-4">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-4 w-4 bg-red-500 text-white text-[10px] items-center justify-center">{notifications.length}</span>
+                    </span>
+                  )}
+              </button>
+              {isNotificationsOpen && (
+                <div className="absolute right-0 mt-2 w-80 bg-white rounded-md shadow-lg overflow-hidden z-20 border">
+                  <div className="py-2 px-4 border-b">
+                    <h3 className="font-semibold text-gray-800">Notifikasi</h3>
+                  </div>
+                  <div className="max-h-96 overflow-y-auto">
+                    {notifications.length > 0 ? (
+                      notifications.map(n => (
+                        <div key={n.id} onClick={() => { onNotificationClick(n); setIsNotificationsOpen(false); }} className="flex items-start gap-3 p-3 hover:bg-gray-100 cursor-pointer border-b">
+                          <div className="flex-shrink-0 mt-1">{getNotificationIcon(n.jenisAjuan)}</div>
+                          <div>
+                            <p className="text-sm font-semibold text-gray-800">{n.nama}</p>
+                            <p className="text-xs text-gray-600">Mengajukan {n.jenisAjuan}</p>
+                            <p className="text-xs text-gray-400 mt-1">{timeSince(parseCustomTimestamp(n.timestamp))}</p>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-center p-8 text-gray-500">
+                        <AlertTriangleIcon className="w-12 h-12 mx-auto text-gray-300"/>
+                        <p className="mt-2 text-sm">Tidak ada notifikasi baru.</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
             <span className="hidden sm:block font-semibold text-gray-700">{user?.name}</span>
             <button onClick={onLogout} className="text-gray-500 hover:text-gray-700" aria-label="Logout">
                 <LogOutIcon className="w-6 h-6" />
@@ -311,6 +407,35 @@ const AdminPage: React.FC<AdminPageProps> = ({ user, onLogout }) => {
         fetchData();
     };
 
+    const handleNotificationClick = (proposal: Usulan) => {
+        let targetMenu = '';
+        switch (proposal.jenisAjuan) {
+            case UsulanJenis.CutiTahunan:
+            case UsulanJenis.IzinSakit:
+                targetMenu = 'persetujuanCuti';
+                break;
+            case UsulanJenis.Lembur:
+                targetMenu = 'persetujuanLembur';
+                break;
+            case UsulanJenis.Substitusi:
+                targetMenu = 'persetujuanSubstitusi';
+                break;
+            case UsulanJenis.PembetulanPresensi:
+                targetMenu = 'persetujuanPembetulan';
+                break;
+        }
+        if (targetMenu) {
+            setActiveMenu(targetMenu);
+            setProposalToView(proposal);
+        }
+    };
+
+    const pendingProposals = useMemo(() => {
+        return proposalsForUser
+            .filter(p => p.status === UsulanStatus.Diajukan)
+            .sort((a, b) => parseCustomTimestamp(b.timestamp).getTime() - parseCustomTimestamp(a.timestamp).getTime());
+    }, [proposalsForUser]);
+
 
     const renderContent = () => {
         if (isLoading) {
@@ -365,7 +490,7 @@ const AdminPage: React.FC<AdminPageProps> = ({ user, onLogout }) => {
             {isMobile && isSidebarOpen && <div className="fixed inset-0 bg-black bg-opacity-50 z-30" onClick={() => setIsSidebarOpen(false)}></div>}
             <Sidebar user={user} isOpen={isSidebarOpen} isMobile={isMobile} activeMenu={activeMenu} setActiveMenu={setActiveMenu} onClose={() => setIsSidebarOpen(false)} />
             <div className="flex-1 flex flex-col overflow-hidden">
-                <TopBar onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)} user={user} onLogout={onLogout} />
+                <TopBar onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)} user={user} onLogout={onLogout} notifications={pendingProposals} onNotificationClick={handleNotificationClick} />
                 <main className="flex-1 overflow-x-hidden overflow-y-auto">
                     <div className="p-4 sm:p-6 lg:p-8">
                         {renderContent()}
