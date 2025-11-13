@@ -224,6 +224,8 @@ export const ProposalsTab: React.FC<{
                                             p.status === UsulanStatus.Disetujui ? 'bg-green-100 text-green-800' : 
                                             p.status === UsulanStatus.Ditolak ? 'bg-red-100 text-red-800' :
                                             p.status === UsulanStatus.Revisi ? 'bg-orange-100 text-orange-800' :
+                                            p.status === UsulanStatus.PembatalanDiajukan ? 'bg-purple-100 text-purple-800' :
+                                            p.status === UsulanStatus.Dibatalkan ? 'bg-gray-200 text-gray-800' :
                                             'bg-yellow-100 text-yellow-800'}`}>
                                             {p.status}
                                         </span>

@@ -231,7 +231,11 @@ const TopBar: React.FC<{
                           <div className="flex-shrink-0 mt-1">{getNotificationIcon(n.jenisAjuan)}</div>
                           <div>
                             <p className="text-sm font-semibold text-gray-800">{n.nama}</p>
-                            <p className="text-xs text-gray-600">Mengajukan {n.jenisAjuan}</p>
+                            <p className="text-xs text-gray-600">
+                              {n.status === UsulanStatus.PembatalanDiajukan
+                                ? `Mengajukan pembatalan ${n.jenisAjuan}`
+                                : `Mengajukan ${n.jenisAjuan}`}
+                            </p>
                             <p className="text-xs text-gray-400 mt-1">{timeSince(parseCustomTimestamp(n.timestamp))}</p>
                           </div>
                         </div>
@@ -391,6 +395,20 @@ const AdminPage: React.FC<AdminPageProps> = ({ user, onLogout }) => {
         fetchData();
     };
 
+    const handleApproveCancellation = async (proposal: Usulan) => {
+        if (proposal.jenisAjuan !== UsulanJenis.CutiTahunan && proposal.jenisAjuan !== UsulanJenis.IzinSakit) return;
+        await apiService.updateProposalStatus(proposal.id, 'cuti', UsulanStatus.Dibatalkan, 'Pembatalan disetujui oleh atasan.');
+        setProposalToView(null);
+        fetchData();
+    };
+
+    const handleRejectCancellation = async (proposal: Usulan) => {
+        if (proposal.jenisAjuan !== UsulanJenis.CutiTahunan && proposal.jenisAjuan !== UsulanJenis.IzinSakit) return;
+        await apiService.updateProposalStatus(proposal.id, 'cuti', UsulanStatus.Disetujui, 'Pembatalan ditolak oleh atasan.');
+        setProposalToView(null);
+        fetchData();
+    };
+
     const handleBulkAction = async (ids: string[], action: 'approve' | 'reject') => {
         const status = action === 'approve' ? UsulanStatus.Disetujui : UsulanStatus.Ditolak;
         const allProposals = [...allCuti, ...allLembur, ...allSubstitusi, ...allPembetulan];
@@ -432,7 +450,7 @@ const AdminPage: React.FC<AdminPageProps> = ({ user, onLogout }) => {
 
     const pendingProposals = useMemo(() => {
         return proposalsForUser
-            .filter(p => p.status === UsulanStatus.Diajukan)
+            .filter(p => p.status === UsulanStatus.Diajukan || p.status === UsulanStatus.PembatalanDiajukan)
             .sort((a, b) => parseCustomTimestamp(b.timestamp).getTime() - parseCustomTimestamp(a.timestamp).getTime());
     }, [proposalsForUser]);
 
@@ -505,6 +523,8 @@ const AdminPage: React.FC<AdminPageProps> = ({ user, onLogout }) => {
                     onClose={() => setProposalToView(null)}
                     onApprove={handleApprove}
                     onReject={handleReject}
+                    onApproveCancellation={handleApproveCancellation}
+                    onRejectCancellation={handleRejectCancellation}
                 />
             )}
 

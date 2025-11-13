@@ -37,6 +37,8 @@ const getStatusBadge = (status: UsulanStatus) => {
         case UsulanStatus.Disetujui: return 'bg-green-100 text-green-800';
         case UsulanStatus.Ditolak: return 'bg-red-100 text-red-800';
         case UsulanStatus.Revisi: return 'bg-orange-100 text-orange-800';
+        case UsulanStatus.PembatalanDiajukan: return 'bg-purple-100 text-purple-800';
+        case UsulanStatus.Dibatalkan: return 'bg-gray-200 text-gray-800';
         case UsulanStatus.Diajukan:
         default: return 'bg-yellow-100 text-yellow-800';
     }
@@ -48,9 +50,11 @@ interface ProposalDetailModalProps {
     onClose: () => void;
     onApprove: (proposal: Usulan) => void;
     onReject: (proposal: Usulan) => void;
+    onApproveCancellation: (proposal: Usulan) => void;
+    onRejectCancellation: (proposal: Usulan) => void;
 }
 
-export const ProposalDetailModal: React.FC<ProposalDetailModalProps> = ({ proposal, employees, onClose, onApprove, onReject }) => {
+export const ProposalDetailModal: React.FC<ProposalDetailModalProps> = ({ proposal, employees, onClose, onApprove, onReject, onApproveCancellation, onRejectCancellation }) => {
     if (!proposal) return null;
 
     const renderProposalSpecificDetails = () => {
@@ -149,6 +153,25 @@ export const ProposalDetailModal: React.FC<ProposalDetailModalProps> = ({ propos
                             className="bg-green-600 py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white hover:bg-green-700"
                         >
                             Setujui
+                        </button>
+                    </div>
+                )}
+                {proposal.status === UsulanStatus.PembatalanDiajukan && (
+                    <div className="flex flex-col sm:flex-row justify-end items-center gap-3 pt-4 mt-4 border-t">
+                        <p className="text-sm text-yellow-800 bg-yellow-50 p-2 rounded-md flex-grow text-center sm:text-left">Pegawai meminta untuk membatalkan cuti ini.</p>
+                        <button
+                            type="button"
+                            onClick={() => onRejectCancellation(proposal)}
+                            className="w-full sm:w-auto bg-gray-600 py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white hover:bg-gray-700"
+                        >
+                            Tolak Pembatalan
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => onApproveCancellation(proposal)}
+                            className="w-full sm:w-auto bg-blue-600 py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white hover:bg-blue-700"
+                        >
+                            Setujui Pembatalan
                         </button>
                     </div>
                 )}
