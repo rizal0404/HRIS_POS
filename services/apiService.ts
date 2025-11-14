@@ -1,5 +1,8 @@
+
+
+
 import { supabase } from './supabase';
-import { UserProfile, JadwalKerja, UsulanCuti, UsulanLembur, Usulan, UsulanStatus, ShiftConfig, Presensi, UsulanSubstitusi, Seksi, UnitKerja, VendorConfig, UsulanJenis, UsulanPembetulanPresensi, LeaveQuota } from '../types';
+import { UserProfile, JadwalKerja, UsulanCuti, UsulanLembur, Usulan, UsulanStatus, ShiftConfig, Presensi, UsulanSubstitusi, Seksi, UnitKerja, VendorConfig, UsulanJenis, UsulanPembetulanPresensi, LeaveQuota, UsulanIzinSakit } from '../types';
 // Fix: Import mockUserProfiles for the seeder function.
 import { mockUserProfiles } from './mockData';
 
@@ -71,7 +74,7 @@ const formatApprovalTimestamp = (isoString: string | null): string => {
 };
 
 
-// Helper function to map snake_case from user_profiles DB to camelCase for frontend
+// Helper function to map snake_case from DB profiles to camelCase for frontend
 function mapProfileToCamelCase(dbProfile: any): UserProfile | null {
     if (!dbProfile) return null;
     return {
@@ -145,6 +148,29 @@ function mapCutiToCamelCase(dbCuti: any): UsulanCuti {
         sisaCuti: dbCuti.sisa_cuti,
         cutiTerpakai: dbCuti.cuti_terpakai,
         penggantiNik: dbCuti.pengganti_nik || [],
+    };
+}
+
+// Helper to map usulan_izinsakit from DB to UsulanIzinSakit interface
+function mapIzinSakitToCamelCase(dbItem: any): UsulanIzinSakit {
+    return {
+        id: String(dbItem.id),
+        timestamp: formatTimestampForComponents(dbItem.created_at),
+        nik: dbItem.nik,
+        nama: dbItem.nama,
+        seksi: dbItem.seksi,
+        status: dbItem.status,
+        approvalTimestamp: formatApprovalTimestamp(dbItem.approval_timestamp),
+        catatanAdmin: dbItem.catatan_admin,
+        rolePengaju: dbItem.role_pengaju,
+        managerId: dbItem.manager_id,
+        jenisAjuan: dbItem.jenis_ajuan,
+        periode: {
+            startDate: dbItem.start_date,
+            endDate: dbItem.end_date,
+        },
+        keterangan: dbItem.keterangan,
+        linkBerkas: dbItem.link_berkas,
     };
 }
 
@@ -237,14 +263,34 @@ export const apiService = {
     handleSupabaseError(authError, 'login');
     if (!authData.user) return null;
 
-    const { data: profile, error: profileError } = await supabase
-        .from('user_profiles')
+    // After login, we don't know if the user is management or pegawai, so we check both tables.
+    const { data: mgmtProfile, error: mgmtError } = await supabase
+        .from('manajemen_profiles')
         .select('*, manager:manager_id(name)')
         .eq('id', authData.user.id)
         .single();
     
-    handleSupabaseError(profileError, 'login profile fetch');
-    return mapProfileToCamelCase(profile);
+    // Only check for non-PGRST116 errors, as not finding a user is expected
+    if (mgmtError && mgmtError.code !== 'PGRST116') {
+        handleSupabaseError(mgmtError, 'login management profile fetch');
+    }
+
+    if(mgmtProfile) {
+        return mapProfileToCamelCase(mgmtProfile);
+    }
+
+    // If not in management, check pegawai
+    const { data: pegawaiProfile, error: pegawaiError } = await supabase
+        .from('pegawai_profiles')
+        .select('*, manager:manager_id(name)')
+        .eq('id', authData.user.id)
+        .single();
+    
+    if (pegawaiError && pegawaiError.code !== 'PGRST116') {
+        handleSupabaseError(pegawaiError, 'login pegawai profile fetch');
+    }
+    
+    return mapProfileToCamelCase(pegawaiProfile);
   },
   
   logout: async (): Promise<void> => {
@@ -261,18 +307,6 @@ export const apiService = {
 
   // --- USER PROFILES ---
   createAuthUser: async (email: string, password: string): Promise<{ id: string }> => {
-    // This function is intended to be called by an admin user.
-    // The previous method `admin.createUser` failed with "User not allowed" because admin-level functions
-    // cannot be called from the client-side with a user's token. They require a service_role key, which
-    // should never be exposed in the browser.
-    //
-    // The correct client-side approach is to use `signUp`, but this automatically logs the new user in,
-    // which logs the admin out and causes a race condition.
-    //
-    // SOLUTION: We will get the admin's current session, sign up the new user, and then immediately
-    // restore the admin's session. This creates the user without disrupting the admin's workflow.
-
-    // 1. Get and store the current admin's session.
     const { data: { session: adminSession }, error: sessionError } = await supabase.auth.getSession();
     if (sessionError || !adminSession) {
         handleSupabaseError(sessionError, 'createAuthUser (getting admin session)');
@@ -281,25 +315,21 @@ export const apiService = {
 
     const sanitizedEmail = email.trim().replace(/"/g, '');
     
-    // 2. Sign up the new user. This temporarily changes the auth state.
     const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
         email: sanitizedEmail,
         password: password,
     });
 
-    // 3. CRITICAL: Immediately restore the admin's session to keep them logged in.
     const { error: setSessionError } = await supabase.auth.setSession({
         access_token: adminSession.access_token,
         refresh_token: adminSession.refresh_token,
     });
 
     if (setSessionError) {
-        // If this fails, the admin is likely logged out.
         handleSupabaseError(setSessionError, 'createAuthUser (restoring admin session)');
         throw new Error('Gagal memulihkan sesi admin. Silakan login kembali.');
     }
     
-    // Now, we can safely handle the result of the signUp operation.
     if (signUpError) {
         if (signUpError.message.toLowerCase().includes("user already exists") || signUpError.message.toLowerCase().includes('check constraint "users_email_partial_key"')) {
             throw new Error(`Email ${sanitizedEmail} sudah terdaftar. Gunakan email lain.`);
@@ -308,7 +338,7 @@ export const apiService = {
              throw new Error(`Gagal membuat akun: ${signUpError.message}. Pastikan format email sudah benar.`);
         }
         handleSupabaseError(signUpError, 'createAuthUser (signUp)');
-        throw signUpError; // Throw the original for detailed console logging
+        throw signUpError;
     }
     
     if (!signUpData.user) {
@@ -319,11 +349,16 @@ export const apiService = {
   },
 
   insertUserProfile: async (userId: string, newProfileData: Omit<UserProfile, 'id'>): Promise<UserProfile> => {
-    const { email, manager, managerId, unitKerja, shiftKerja, noHp, totalCutiTahunan, ...restOfProfile } = newProfileData;
+    const { email, manager, managerId, unitKerja, shiftKerja, noHp, totalCutiTahunan, role, ...restOfProfile } = newProfileData;
+    
+    const isManagement = ['SuperAdmin', 'Admin', 'Manager'].includes(role);
+    const tableName = isManagement ? 'manajemen_profiles' : 'pegawai_profiles';
+
     const profilePayload = {
         id: userId,
         ...restOfProfile,
-        email: email.trim().replace(/"/g, ''), // Sanitize email again
+        email: email.trim().replace(/"/g, ''),
+        role: role,
         manager_id: managerId || null,
         unit_kerja: unitKerja,
         shift_kerja: shiftKerja,
@@ -332,15 +367,13 @@ export const apiService = {
     };
 
     const { data, error } = await supabase
-        .from('user_profiles')
+        .from(tableName)
         .insert(profilePayload)
         .select()
         .single();
 
-    handleSupabaseError(error, 'insertUserProfile');
+    handleSupabaseError(error, `insertUserProfile to ${tableName}`);
     if (error) {
-        // In a real-world scenario with server-side capabilities, we would trigger a function
-        // to delete the orphaned auth user created in the previous step.
         console.warn(`Profile creation failed for user ID ${userId}. An orphaned authentication user may exist.`);
         throw new Error(`Gagal menyimpan detail profil. Akun otentikasi mungkin sudah dibuat. Hubungi admin. Error: ${error.message}`);
     }
@@ -351,34 +384,55 @@ export const apiService = {
   },
 
   getUserProfileById: async (id: string): Promise<UserProfile | null> => {
-    const { data, error } = await supabase
-        .from('user_profiles')
-        .select('*, manager:manager_id(name)')
-        .eq('id', id)
-        .single();
+    const { data: mgmtProfile } = await supabase
+        .from('manajemen_profiles').select('*, manager:manager_id(name)').eq('id', id).single();
+    if (mgmtProfile) return mapProfileToCamelCase(mgmtProfile);
     
-    handleSupabaseError(error, 'getUserProfileById');
-    return mapProfileToCamelCase(data);
+    const { data: pegawaiProfile } = await supabase
+        .from('pegawai_profiles').select('*, manager:manager_id(name)').eq('id', id).single();
+    return mapProfileToCamelCase(pegawaiProfile);
   },
 
   getUserProfileByNik: async (nik: string): Promise<UserProfile | null> => {
-    const { data, error } = await supabase.from('user_profiles').select('*, manager:manager_id(name)').eq('nik', nik).single();
-    handleSupabaseError(error, 'getUserProfileByNik');
-    return mapProfileToCamelCase(data);
+    const { data: mgmtProfile } = await supabase.from('manajemen_profiles').select('*, manager:manager_id(name)').eq('nik', nik).single();
+    if (mgmtProfile) return mapProfileToCamelCase(mgmtProfile);
+    
+    const { data: pegawaiProfile } = await supabase.from('pegawai_profiles').select('*, manager:manager_id(name)').eq('nik', nik).single();
+    return mapProfileToCamelCase(pegawaiProfile);
   },
 
   getAllUserProfiles: async (): Promise<UserProfile[]> => {
-    const { data, error } = await supabase
-        .from('user_profiles')
-        .select('*, manager:manager_id(name)');
-    handleSupabaseError(error, 'getAllUserProfiles');
+    const { data: manajemen, error: mgmtError } = await supabase.from('manajemen_profiles').select('*, manager:manager_id(name)');
+    handleSupabaseError(mgmtError, 'getAllUserProfiles (manajemen)');
+    
+    const { data: pegawai, error: pegawaiError } = await supabase.from('pegawai_profiles').select('*, manager:manager_id(name)');
+    handleSupabaseError(pegawaiError, 'getAllUserProfiles (pegawai)');
+    
+    const combined = [...(manajemen || []), ...(pegawai || [])];
+    return combined.map(p => mapProfileToCamelCase(p)).filter((p): p is UserProfile => p !== null);
+  },
+
+  getManagementProfiles: async (): Promise<UserProfile[]> => {
+    const { data, error } = await supabase.from('manajemen_profiles').select('*, manager:manager_id(name)');
+    handleSupabaseError(error, 'getManagementProfiles');
+    return (data || []).map(p => mapProfileToCamelCase(p)).filter((p): p is UserProfile => p !== null);
+  },
+
+  getPegawaiProfiles: async (): Promise<UserProfile[]> => {
+    const { data, error } = await supabase.from('pegawai_profiles').select('*, manager:manager_id(name)');
+    handleSupabaseError(error, 'getPegawaiProfiles');
     return (data || []).map(p => mapProfileToCamelCase(p)).filter((p): p is UserProfile => p !== null);
   },
 
   updateUserProfile: async (updatedProfile: UserProfile): Promise<UserProfile> => {
-    const { id, manager, managerId, unitKerja, shiftKerja, noHp, totalCutiTahunan, ...profileData } = updatedProfile;
+    const { id, manager, managerId, unitKerja, shiftKerja, noHp, totalCutiTahunan, role, ...profileData } = updatedProfile;
+
+    const isManagement = ['SuperAdmin', 'Admin', 'Manager'].includes(role);
+    const tableName = isManagement ? 'manajemen_profiles' : 'pegawai_profiles';
+    
     const updatePayload = {
         ...profileData,
+        role,
         manager_id: managerId || null,
         unit_kerja: unitKerja,
         shift_kerja: shiftKerja,
@@ -386,21 +440,27 @@ export const apiService = {
         total_cuti_tahunan: totalCutiTahunan,
     };
     
-    const { data, error } = await supabase.from('user_profiles').update(updatePayload).eq('id', id).select().single();
-    handleSupabaseError(error, 'updateUserProfile');
+    const { data, error } = await supabase.from(tableName).update(updatePayload).eq('id', id).select().single();
+    handleSupabaseError(error, `updateUserProfile in ${tableName}`);
     return mapProfileToCamelCase(data) as UserProfile;
   },
 
   deleteUserProfile: async (id: string): Promise<void> => {
-    // This should delete from user_profiles. Deleting from auth.users needs to be done on the server.
-    const { error } = await supabase.from('user_profiles').delete().eq('id', id);
-    handleSupabaseError(error, 'deleteUserProfile');
+    // We don't know which table the user is in, so try both.
+    const { error: mgmtError } = await supabase.from('manajemen_profiles').delete().eq('id', id);
+    // If it's a "not found" error, that's fine, it might be in the other table.
+    if (mgmtError && mgmtError.code !== 'PGRST116') handleSupabaseError(mgmtError, 'deleteUserProfile (manajemen)');
+
+    const { error: pegawaiError } = await supabase.from('pegawai_profiles').delete().eq('id', id);
+    if (pegawaiError && pegawaiError.code !== 'PGRST116') handleSupabaseError(pegawaiError, 'deleteUserProfile (pegawai)');
   },
 
   batchUpsertUserProfiles: async (profiles: Omit<UserProfile, 'id'>[]): Promise<void> => {
-      console.warn("Batch upsert only UPDATES existing profiles based on email. It does not create new auth users.");
+      console.warn("Batch upsert only UPDATES existing pegawai profiles based on email. It does not create new auth users or update management.");
       for (const profile of profiles) {
           try {
+              if (profile.role !== 'Pegawai') continue; // Only process pegawai for now
+
               // eslint-disable-next-line @typescript-eslint/no-unused-vars
               const { manager, managerId, unitKerja, shiftKerja, noHp, totalCutiTahunan, ...restOfProfile } = profile;
               const updatePayload = {
@@ -413,7 +473,7 @@ export const apiService = {
               };
 
               const { error } = await supabase
-                .from('user_profiles')
+                .from('pegawai_profiles')
                 .update(updatePayload)
                 .eq('email', profile.email);
             
@@ -427,32 +487,10 @@ export const apiService = {
   },
 
   seedDatabase: async (): Promise<string> => {
-    console.log("Seeding database with user profiles...");
-    for (const profile of mockUserProfiles) {
-        try {
-            // eslint-disable-next-line @typescript-eslint/no-unused-vars
-            const { id, manager, ...restOfProfile } = profile;
-            const updatePayload = {
-                ...restOfProfile,
-                manager_id: profile.managerId || null,
-                unit_kerja: profile.unitKerja,
-                shift_kerja: profile.shiftKerja,
-                no_hp: profile.noHp,
-                total_cuti_tahunan: profile.totalCutiTahunan,
-            };
-            const { error } = await supabase
-                .from('user_profiles')
-                .update(updatePayload)
-                .eq('email', profile.email);
-            
-            if (error) {
-                 console.error(`Failed to seed profile for ${profile.email}:`, error.message);
-            }
-        } catch (error) {
-            console.error(`Exception during seeding for ${profile.email}:`, error);
-        }
-    }
-    return `Attempted to seed ${mockUserProfiles.length} user profiles into Supabase. Check console for errors. Other data is now live.`;
+    console.warn("Seeding logic has been simplified due to table splitting. Please manage users manually.");
+    // The original seeder is complex to adapt without knowing which users are which role.
+    // It's safer to guide the user to add them manually via the UI post-split.
+    return `Database tables have been split. Seeding from mockData is disabled. Please add/manage users through the UI.`;
   },
 
   // --- SEKSI, UNIT KERJA, VENDOR (LIVE DATA) ---
@@ -565,9 +603,13 @@ export const apiService = {
 
   upsertJadwal: async (newJadwal: Omit<JadwalKerja, 'id' | 'nama' | 'seksi'>): Promise<JadwalKerja> => {
     const { nik, tanggal, shift } = newJadwal;
-    const { data: employee } = await supabase.from('user_profiles').select('name, seksi').eq('nik', nik).single();
-    if (!employee) throw new Error(`Employee with NIK ${nik} not found.`);
-
+    // We don't know which table the user is in, so try both.
+    const { data: employeeData, error: employeeError } = await supabase.rpc('get_user_name_and_seksi_by_nik', { p_nik: nik });
+     if (employeeError || !employeeData || employeeData.length === 0) {
+        throw new Error(`Employee with NIK ${nik} not found.`);
+    }
+    const employee = employeeData[0];
+    
     const payload = {
       nik,
       tanggal: formatDateForSupabase(tanggal),
@@ -598,8 +640,6 @@ export const apiService = {
     if (error && error.code === '42P01') { // undefined_table
         throw new Error("Tabel 'user_device_fingerprints' tidak ditemukan. Silakan lihat README.md untuk instruksi setup database.");
     }
-    // 'PGRST116' means no rows found, which is a valid case (unregistered device), not an error.
-    // We only pass other errors to the handler.
     if (error && error.code !== 'PGRST116') {
         handleSupabaseError(error, 'getFingerprintOwner');
     }
@@ -611,8 +651,6 @@ export const apiService = {
     if (error && error.code === '42P01') { // undefined_table
       throw new Error("Tabel 'user_device_fingerprints' tidak ditemukan. Fitur keamanan perangkat dinonaktifkan. Silakan lihat README.md untuk instruksi setup database.");
     }
-    // If we get a unique violation, it means another user registered the device in a race condition.
-    // The check in submitClockEvent will catch this on the next attempt. We can ignore the insert error here.
     if (error && error.code === '23505') { // unique_violation
         console.warn(`Attempted to register an already existing fingerprint: ${fingerprintId}. This might be a race condition.`);
         return;
@@ -651,7 +689,6 @@ export const apiService = {
 
     let isNewDevice = false;
 
-    // Fingerprint check only for 'Bekerja di Pabrik'
     if (formData.workLocationType === 'Bekerja di Pabrik') {
         if (!fingerprintId) {
             throw new Error("ID perangkat tidak dapat dideteksi. Absensi gagal. Harap refresh halaman dan izinkan akses yang diperlukan.");
@@ -660,14 +697,10 @@ export const apiService = {
         const owner = await apiService.getFingerprintOwner(fingerprintId);
 
         if (owner) {
-            // Device is registered
             if (owner.user_id !== user.id) {
-                // Registered to someone else, block the action
                 throw new Error("Perangkat ini sudah terdaftar untuk pengguna lain. Silakan gunakan perangkat pribadi Anda untuk absen.");
             }
-            // If owner.user_id === user.id, it's a known device for this user. Proceed.
         } else {
-            // Device is not registered by anyone. Mark it as a new device for this user.
             isNewDevice = true;
         }
     }
@@ -720,7 +753,6 @@ export const apiService = {
       handleSupabaseError(error, 'submitClockEvent (clock-out)');
     }
 
-    // After successful clock event, if it was a new device, register it for the user.
     if (formData.workLocationType === 'Bekerja di Pabrik' && isNewDevice) {
         await apiService.addFingerprintForUser(user.id, fingerprintId);
     }
@@ -776,6 +808,11 @@ SETUP INSTRUCTIONS
       handleSupabaseError(error, 'getCutiByNik');
       return (data || []).map(mapCutiToCamelCase);
   },
+  getIzinSakitByNik: async (nik: string): Promise<UsulanIzinSakit[]> => {
+      const { data, error } = await supabase.from('usulan_izinsakit').select('*').eq('nik', nik);
+      handleSupabaseError(error, 'getIzinSakitByNik');
+      return (data || []).map(mapIzinSakitToCamelCase);
+  },
   getLemburByNik: async (nik: string): Promise<UsulanLembur[]> => {
       const { data, error } = await supabase.from('usulan_lembur').select('*').eq('nik', nik);
       handleSupabaseError(error, 'getLemburByNik');
@@ -796,6 +833,11 @@ SETUP INSTRUCTIONS
       handleSupabaseError(error, 'getAllCuti');
       return (data || []).map(mapCutiToCamelCase);
   },
+  getAllIzinSakit: async (): Promise<UsulanIzinSakit[]> => {
+      const { data, error } = await supabase.from('usulan_izinsakit').select('*');
+      handleSupabaseError(error, 'getAllIzinSakit');
+      return (data || []).map(mapIzinSakitToCamelCase);
+  },
   getAllLembur: async (): Promise<UsulanLembur[]> => {
       const { data, error } = await supabase.from('usulan_lembur').select('*');
       handleSupabaseError(error, 'getAllLembur');
@@ -814,14 +856,13 @@ SETUP INSTRUCTIONS
 
 
   addCuti: async (newCuti: Omit<UsulanCuti, 'id' | 'timestamp' | 'sisaCuti' | 'cutiTerpakai' | 'authorUid'>): Promise<UsulanCuti> => {
-      const { data: userProfile } = await supabase.from('user_profiles').select('manager_id').eq('nik', newCuti.nik).single();
       const payload = {
           nik: newCuti.nik,
           nama: newCuti.nama,
           seksi: newCuti.seksi,
           status: newCuti.status,
           role_pengaju: newCuti.rolePengaju,
-          manager_id: userProfile?.manager_id,
+          manager_id: newCuti.managerId,
           jenis_ajuan: newCuti.jenisAjuan,
           start_date: newCuti.periode.startDate,
           end_date: newCuti.periode.endDate,
@@ -833,15 +874,32 @@ SETUP INSTRUCTIONS
       handleSupabaseError(error, 'addCuti');
       return mapCutiToCamelCase(data);
   },
+   addIzinSakit: async (newIzin: Omit<UsulanIzinSakit, 'id' | 'timestamp' | 'authorUid'>): Promise<UsulanIzinSakit> => {
+      const payload = {
+          nik: newIzin.nik,
+          nama: newIzin.nama,
+          seksi: newIzin.seksi,
+          status: newIzin.status,
+          role_pengaju: newIzin.rolePengaju,
+          manager_id: newIzin.managerId,
+          jenis_ajuan: newIzin.jenisAjuan,
+          start_date: newIzin.periode.startDate,
+          end_date: newIzin.periode.endDate,
+          keterangan: newIzin.keterangan,
+          link_berkas: newIzin.linkBerkas,
+      };
+      const { data, error } = await supabase.from('usulan_izinsakit').insert(payload).select().single();
+      handleSupabaseError(error, 'addIzinSakit');
+      return mapIzinSakitToCamelCase(data);
+  },
   addLembur: async (newLembur: Omit<UsulanLembur, 'id' | 'timestamp' | 'authorUid'>): Promise<UsulanLembur> => {
-      const { data: userProfile } = await supabase.from('user_profiles').select('manager_id').eq('nik', newLembur.nik).single();
       const payload = {
           nik: newLembur.nik,
           nama: newLembur.nama,
           seksi: newLembur.seksi,
           status: newLembur.status,
           role_pengaju: newLembur.rolePengaju,
-          manager_id: userProfile?.manager_id,
+          manager_id: newLembur.managerId,
           jenis_ajuan: newLembur.jenisAjuan,
           tanggal_lembur: newLembur.tanggalLembur,
           shift: newLembur.shift,
@@ -857,14 +915,13 @@ SETUP INSTRUCTIONS
       return mapLemburToCamelCase(data);
   },
   addSubstitusi: async (newSubstitusi: Omit<UsulanSubstitusi, 'id' | 'timestamp' | 'authorUid'>): Promise<UsulanSubstitusi> => {
-      const { data: userProfile } = await supabase.from('user_profiles').select('manager_id').eq('nik', newSubstitusi.nik).single();
       const payload = {
           nik: newSubstitusi.nik,
           nama: newSubstitusi.nama,
           seksi: newSubstitusi.seksi,
           status: newSubstitusi.status,
           role_pengaju: newSubstitusi.rolePengaju,
-          manager_id: userProfile?.manager_id,
+          manager_id: newSubstitusi.managerId,
           jenis_ajuan: newSubstitusi.jenisAjuan,
           tanggal_substitusi: newSubstitusi.tanggalSubstitusi,
           shift_awal: newSubstitusi.shiftAwal,
@@ -907,7 +964,7 @@ CREATE TABLE public.usulan_pembetulan_presensi (
     status character varying DEFAULT 'Diajukan'::character varying NOT NULL,
     catatan_admin text,
     role_pengaju character varying NOT NULL,
-    manager_id uuid REFERENCES public.user_profiles(id),
+    manager_id uuid REFERENCES public.manajemen_profiles(id), -- Updated reference
     jenis_ajuan character varying DEFAULT 'Pembetulan Presensi'::character varying NOT NULL,
     presensi_id character varying,
     tanggal_pembetulan date NOT NULL,
@@ -924,17 +981,17 @@ ALTER TABLE public.usulan_pembetulan_presensi ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Allow users to insert their own requests"
 ON public.usulan_pembetulan_presensi FOR INSERT
 TO authenticated
-WITH CHECK (nik = (SELECT nik FROM public.user_profiles WHERE id = auth.uid()));
+WITH CHECK (nik IN (SELECT nik FROM public.pegawai_profiles WHERE id = auth.uid()));
 
 CREATE POLICY "Allow users to view their own requests"
 ON public.usulan_pembetulan_presensi FOR SELECT
 TO authenticated
-USING (nik = (SELECT nik FROM public.user_profiles WHERE id = auth.uid()));
+USING (nik IN (SELECT nik FROM public.pegawai_profiles WHERE id = auth.uid()));
 
 CREATE POLICY "Allow managers and admins to view/update all requests"
 ON public.usulan_pembetulan_presensi FOR ALL
 TO authenticated
-USING ((SELECT role FROM public.user_profiles WHERE id = auth.uid()) IN ('Manager', 'Admin', 'SuperAdmin'));
+USING ((SELECT role FROM public.manajemen_profiles WHERE id = auth.uid()) IN ('Manager', 'Admin', 'SuperAdmin'));
 `;
             throw new Error(userMessage);
       }
@@ -957,7 +1014,6 @@ USING ((SELECT role FROM public.user_profiles WHERE id = auth.uid()) IN ('Manage
   },
   updateLembur: async (id: string, updatedData: Partial<UsulanLembur>): Promise<UsulanLembur> => {
       const payload: Record<string, any> = {
-        // When a 'Revisi' is submitted, it should become 'Diajukan' again for re-approval.
         status: UsulanStatus.Diajukan,
       };
 
@@ -976,7 +1032,6 @@ USING ((SELECT role FROM public.user_profiles WHERE id = auth.uid()) IN ('Manage
   },
   updateSubstitusi: async (id: string, updatedData: Partial<UsulanSubstitusi>): Promise<UsulanSubstitusi> => {
        const payload: Record<string, any> = {};
-      // Add fields to update as needed
       if (updatedData.keterangan) payload.keterangan = updatedData.keterangan;
 
       const { data, error } = await supabase.from('usulan_substitusi').update(payload).eq('id', id).select().single();
@@ -989,12 +1044,13 @@ USING ((SELECT role FROM public.user_profiles WHERE id = auth.uid()) IN ('Manage
       handleSupabaseError(error, 'requestCutiCancellation');
   },
 
-  updateProposalStatus: async (id: string, type: 'cuti' | 'lembur' | 'substitusi' | 'pembetulan', status: UsulanStatus, catatanAdmin?: string): Promise<void> => {
+  updateProposalStatus: async (id: string, type: 'cuti' | 'lembur' | 'substitusi' | 'pembetulan' | 'izinSakit', status: UsulanStatus, catatanAdmin?: string): Promise<void> => {
       const tableNameMap = {
         cuti: 'usulan_cuti',
         lembur: 'usulan_lembur',
         substitusi: 'usulan_substitusi',
         pembetulan: 'usulan_pembetulan_presensi',
+        izinSakit: 'usulan_izinsakit',
       };
       const tableName = tableNameMap[type];
       const payload: { status: UsulanStatus, catatan_admin?: string, approval_timestamp?: string } = {
@@ -1008,12 +1064,13 @@ USING ((SELECT role FROM public.user_profiles WHERE id = auth.uid()) IN ('Manage
       handleSupabaseError(error, `updateProposalStatus for ${type}`);
   },
 
-  deleteProposal: async (id: string, type: 'cuti' | 'lembur' | 'substitusi' | 'pembetulan'): Promise<void> => {
+  deleteProposal: async (id: string, type: 'cuti' | 'lembur' | 'substitusi' | 'pembetulan' | 'izinSakit'): Promise<void> => {
       const tableNameMap = {
         cuti: 'usulan_cuti',
         lembur: 'usulan_lembur',
         substitusi: 'usulan_substitusi',
         pembetulan: 'usulan_pembetulan_presensi',
+        izinSakit: 'usulan_izinsakit',
       };
       const tableName = tableNameMap[type];
       const { error } = await supabase.from(tableName).delete().eq('id', id);

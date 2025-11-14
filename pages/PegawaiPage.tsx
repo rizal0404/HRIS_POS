@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { UserProfile, JadwalKerja, UsulanCuti, UsulanLembur, ShiftConfig, Presensi, Usulan, UsulanJenis, UsulanSubstitusi, VendorConfig, UsulanPembetulanPresensi, UsulanStatus, UserRole } from '../types';
-import { apiService } from '../services/apiService';
-import { HomeIcon, GridIcon, ChevronRightIcon, ClockIcon, CalendarIcon, SearchIcon, MenuIcon, ArrowLeftRightIcon, UserCheckIcon, UserIcon, PlaneIcon, SitemapIcon, LogOutIcon, FileTextIcon, XIcon } from '../components/Icons';
+import { UserProfile, JadwalKerja, UsulanCuti, UsulanLembur, ShiftConfig, Presensi, Usulan, UsulanJenis, UsulanSubstitusi, VendorConfig, UsulanPembetulanPresensi, UsulanStatus, UserRole, UsulanIzinSakit } from '../../types';
+import { apiService } from '../../services/apiService';
+import { HomeIcon, GridIcon, ChevronRightIcon, ClockIcon, CalendarIcon, SearchIcon, MenuIcon, ArrowLeftRightIcon, UserCheckIcon, UserIcon, PlaneIcon, SitemapIcon, LogOutIcon, FileTextIcon, XIcon } from '../../components/Icons';
 
 import { DashboardContent } from './pegawai/DashboardContent';
 import { CutiView } from './pegawai/CutiView';
@@ -45,7 +45,8 @@ const AjuanIzinSakitModal: React.FC<{
             const fileName = `${user.nik}-izin-${Date.now()}-${buktiFile.name.replace(/\s+/g, '_')}`;
             const fileUrl = await apiService.uploadProofFile(buktiFile, fileName);
 
-            await apiService.addCuti({
+            // Fix (line 52): Called apiService.addIzinSakit instead of addCuti and removed penggantiNik.
+            await apiService.addIzinSakit({
                 nik: user.nik,
                 nama: user.name,
                 seksi: user.seksi,
@@ -54,8 +55,8 @@ const AjuanIzinSakitModal: React.FC<{
                 keterangan: alasan,
                 status: UsulanStatus.Diajukan,
                 rolePengaju: user.role,
+                managerId: user.managerId,
                 linkBerkas: fileUrl,
-                penggantiNik: [],
             });
             onSuccess();
         } catch (error) {
@@ -102,7 +103,7 @@ const AjuanIzinSakitModal: React.FC<{
 };
 
 const IzinSakitView: React.FC<{
-  usulanIzinSakit: UsulanCuti[];
+  usulanIzinSakit: UsulanIzinSakit[];
   onBuatAjuan: () => void;
   onDeleteAjuan: (proposalId: string) => void;
 }> = ({ usulanIzinSakit, onBuatAjuan, onDeleteAjuan }) => {
@@ -347,6 +348,7 @@ const PegawaiPage: React.FC<PegawaiPageProps> = ({ user, onLogout }) => {
   const [pegawai, setPegawai] = useState<UserProfile | null>(null);
   const [jadwal, setJadwal] = useState<JadwalKerja[]>([]);
   const [usulanCuti, setUsulanCuti] = useState<UsulanCuti[]>([]);
+  const [usulanIzinSakit, setUsulanIzinSakit] = useState<UsulanIzinSakit[]>([]);
   const [usulanLembur, setUsulanLembur] = useState<UsulanLembur[]>([]);
   const [usulanSubstitusi, setUsulanSubstitusi] = useState<UsulanSubstitusi[]>([]);
   const [usulanPembetulan, setUsulanPembetulan] = useState<UsulanPembetulanPresensi[]>([]);
@@ -365,7 +367,7 @@ const PegawaiPage: React.FC<PegawaiPageProps> = ({ user, onLogout }) => {
   const [editingLembur, setEditingLembur] = useState<UsulanLembur | null>(null);
   const [alert, setAlert] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
-  const [proposalToDelete, setProposalToDelete] = useState<{ id: string; type: 'cuti' | 'lembur' | 'substitusi' | 'pembetulan' } | null>(null);
+  const [proposalToDelete, setProposalToDelete] = useState<{ id: string; type: 'cuti' | 'lembur' | 'substitusi' | 'pembetulan' | 'izinSakit' } | null>(null);
   const [cutiToCancelId, setCutiToCancelId] = useState<string | null>(null);
 
 
@@ -376,6 +378,7 @@ const PegawaiPage: React.FC<PegawaiPageProps> = ({ user, onLogout }) => {
         pegawaiData,
         jadwalData,
         cutiData,
+        izinSakitData,
         lemburData,
         substitusiData,
         pembetulanData,
@@ -388,6 +391,7 @@ const PegawaiPage: React.FC<PegawaiPageProps> = ({ user, onLogout }) => {
         apiService.getUserProfileByNik(user.nik),
         apiService.getJadwalByNik(user.nik),
         apiService.getCutiByNik(user.nik),
+        apiService.getIzinSakitByNik(user.nik),
         apiService.getLemburByNik(user.nik),
         apiService.getSubstitusiByNik(user.nik),
         apiService.getPembetulanPresensiByNik(user.nik),
@@ -400,6 +404,7 @@ const PegawaiPage: React.FC<PegawaiPageProps> = ({ user, onLogout }) => {
       setPegawai(pegawaiData);
       setJadwal(jadwalData);
       setUsulanCuti(cutiData);
+      setUsulanIzinSakit(izinSakitData);
       setUsulanLembur(lemburData);
       setUsulanSubstitusi(substitusiData);
       setUsulanPembetulan(pembetulanData);
@@ -492,7 +497,7 @@ const PegawaiPage: React.FC<PegawaiPageProps> = ({ user, onLogout }) => {
         setAlert({ message, type: 'error' });
     };
 
-    const handleDeleteProposal = (proposalId: string, type: 'cuti' | 'lembur' | 'substitusi' | 'pembetulan') => {
+    const handleDeleteProposal = (proposalId: string, type: 'cuti' | 'lembur' | 'substitusi' | 'pembetulan' | 'izinSakit') => {
         setProposalToDelete({ id: proposalId, type });
         setIsConfirmModalOpen(true);
     };
@@ -533,7 +538,7 @@ const PegawaiPage: React.FC<PegawaiPageProps> = ({ user, onLogout }) => {
   }
   
   const renderContent = () => {
-    const allUsulan = [...usulanCuti, ...usulanLembur, ...usulanSubstitusi, ...usulanPembetulan];
+    const allUsulan = [...usulanCuti, ...usulanIzinSakit, ...usulanLembur, ...usulanSubstitusi, ...usulanPembetulan];
     switch (activeMenu) {
         case 'beranda':
             return <DashboardContent 
@@ -554,10 +559,11 @@ const PegawaiPage: React.FC<PegawaiPageProps> = ({ user, onLogout }) => {
                         onAjukanPembatalan={handleRequestCutiCancellation}
                     />;
         case 'izinSakit':
+            // Fix (line 559): Pass correct data and props to IzinSakitView.
             return <IzinSakitView
-                usulanIzinSakit={usulanCuti.filter(u => u.jenisAjuan === UsulanJenis.IzinSakit)}
+                usulanIzinSakit={usulanIzinSakit}
                 onBuatAjuan={() => setIsIzinSakitModalOpen(true)}
-                onDeleteAjuan={(id) => handleDeleteProposal(id, 'cuti')}
+                onDeleteAjuan={(id) => handleDeleteProposal(id, 'izinSakit')}
             />;
         case 'pembatalanCuti':
             return <CutiView
@@ -597,7 +603,7 @@ const PegawaiPage: React.FC<PegawaiPageProps> = ({ user, onLogout }) => {
         case 'jadwalShift':
             return <ShiftScheduleView 
                         schedules={allJadwal} 
-                        employees={allPegawai.filter(e => e.role === 'Pegawai')} 
+                        employees={allPegawai.filter(e => e.role === UserRole.Pegawai)} 
                         shiftConfigs={shiftConfigs} 
                     />;
         case 'presensi':

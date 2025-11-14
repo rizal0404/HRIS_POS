@@ -129,7 +129,7 @@ const UserProfileFormModal: React.FC<{
         <Modal 
             isOpen={isOpen} 
             onClose={onClose} 
-            title={profile ? "Ubah Data Pegawai" : (step === 1 ? "Tambah Akun Login (1/2)" : "Lengkapi Profil (2/2)")}
+            title={profile ? "Ubah Data Pengguna" : (step === 1 ? "Tambah Akun Login (1/2)" : "Lengkapi Profil (2/2)")}
         >
             <form onSubmit={step === 1 && !profile ? handleAuthSubmit : handleFinalSubmit} className="space-y-3">
                 {error && <div className="p-3 bg-red-100 text-red-700 rounded-md text-sm">{error}</div>}
@@ -306,7 +306,14 @@ const UploadUsersModal: React.FC<{ isOpen: boolean, onClose: () => void, onSucce
     );
 };
 
-export const EmployeesTab: React.FC<{employees: UserProfile[], allSeksi: Seksi[], allUnitKerja: UnitKerja[], onDataChange: () => void}> = ({employees, allSeksi, allUnitKerja, onDataChange}) => {
+export const EmployeesTab: React.FC<{
+    employees: UserProfile[], 
+    allEmployees: UserProfile[],
+    allSeksi: Seksi[], 
+    allUnitKerja: UnitKerja[], 
+    onDataChange: () => void,
+    mode: 'manajemen' | 'pegawai'
+}> = ({employees, allEmployees, allSeksi, allUnitKerja, onDataChange, mode}) => {
     const [isFormModalOpen, setIsFormModalOpen] = useState(false);
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
     const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
@@ -314,6 +321,9 @@ export const EmployeesTab: React.FC<{employees: UserProfile[], allSeksi: Seksi[]
     const [deletingProfile, setDeletingProfile] = useState<UserProfile | null>(null);
     const [isResetModalOpen, setIsResetModalOpen] = useState(false);
     const [resettingProfile, setResettingProfile] = useState<UserProfile | null>(null);
+
+    const title = mode === 'manajemen' ? 'Data Manajemen' : 'Data Pegawai';
+    const addUserButtonText = mode === 'manajemen' ? 'Tambah Manajemen' : 'Tambah Pegawai';
 
     const handleAddClick = () => {
         setEditingProfile(null);
@@ -373,7 +383,7 @@ export const EmployeesTab: React.FC<{employees: UserProfile[], allSeksi: Seksi[]
         const encodedUri = encodeURI(csvContent);
         const link = document.createElement("a");
         link.setAttribute("href", encodedUri);
-        link.setAttribute("download", "data_pegawai.csv");
+        link.setAttribute("download", `data_${mode}.csv`);
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -382,19 +392,21 @@ export const EmployeesTab: React.FC<{employees: UserProfile[], allSeksi: Seksi[]
     return (
         <div className="bg-white p-6 rounded-lg shadow-md">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-4">
-                <h2 className="text-xl font-bold text-slate-800">Data Pegawai</h2>
+                <h2 className="text-xl font-bold text-slate-800">{title}</h2>
                 <div className="flex gap-2 flex-wrap">
                     <button onClick={handleDownloadCSV} className="flex items-center gap-2 bg-green-600 text-white px-3 py-2 text-sm rounded-md hover:bg-green-700 transition">
                         <DownloadIcon className="w-4 h-4"/>
                         <span>Download Data</span>
                     </button>
+                    {mode === 'pegawai' && (
                      <button onClick={() => setIsUploadModalOpen(true)} className="flex items-center gap-2 bg-orange-500 text-white px-3 py-2 text-sm rounded-md hover:bg-orange-600 transition">
                         <UploadIcon className="w-4 h-4"/>
                         <span>Upload Data</span>
                     </button>
+                    )}
                     <button onClick={handleAddClick} className="flex items-center gap-2 bg-blue-600 text-white px-3 py-2 text-sm rounded-md hover:bg-blue-700 transition">
                         <PlusCircleIcon className="w-4 h-4"/>
-                        <span>Tambah Pegawai</span>
+                        <span>{addUserButtonText}</span>
                     </button>
                 </div>
             </div>
@@ -439,7 +451,7 @@ export const EmployeesTab: React.FC<{employees: UserProfile[], allSeksi: Seksi[]
                     onClose={() => setIsFormModalOpen(false)}
                     onSuccess={handleSaveSuccess}
                     profile={editingProfile}
-                    allEmployees={employees}
+                    allEmployees={allEmployees}
                     allSeksi={allSeksi}
                     allUnitKerja={allUnitKerja}
                 />

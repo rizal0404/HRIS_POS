@@ -89,7 +89,8 @@ export const TambahPengajuanCutiView: React.FC<TambahPengajuanCutiViewProps> = (
                     periode: { startDate, endDate: finalEndDate },
                     keterangan,
                     status: UsulanStatus.Diajukan,
-                    rolePengaju: user.role as UserRole.Pegawai,
+                    rolePengaju: user.role,
+                    managerId: user.managerId,
                     penggantiNik: delegasi ? [delegasi] : [],
                 };
                 await apiService.addCuti(newUsulan);

@@ -59,6 +59,7 @@ const PengajuanSubstitusiModal: React.FC<{
                 seksi: user.seksi,
                 status: UsulanStatus.Diajukan,
                 rolePengaju: user.role,
+                managerId: user.managerId,
                 jenisAjuan: UsulanJenis.Substitusi,
                 tanggalSubstitusi: tanggal,
                 shiftAwal: shiftAwal,

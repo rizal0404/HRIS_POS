@@ -1,4 +1,4 @@
-import { UserProfile, JadwalKerja, UsulanCuti, UsulanLembur, UserRole, UsulanStatus, UsulanJenis, Shift, ShiftConfig, UsulanSubstitusi, Seksi, UnitKerja, VendorConfig, LeaveQuota } from '../types';
+import { UserProfile, JadwalKerja, UsulanCuti, UsulanLembur, UserRole, UsulanStatus, UsulanJenis, Shift, ShiftConfig, UsulanSubstitusi, Seksi, UnitKerja, VendorConfig, LeaveQuota, UsulanIzinSakit } from '../types';
 
 export const mockUserProfiles: UserProfile[] = [
     { id: 'amiruddin@example.com', email: 'amiruddin@example.com', name: 'AMIRUDDIN', role: UserRole.SuperAdmin, nik: '00004491', posisi: 'Analis', shiftKerja: 'Shift', seksi: 'QC 45', unitKerja: 'Unit QC', alamat: 'Alamat 1', noHp: '0810000001', totalCutiTahunan: 12 },
@@ -62,10 +62,14 @@ const generateSchedules = (): JadwalKerja[] => {
 
 export const mockJadwalKerja: JadwalKerja[] = generateSchedules();
 
+// Fix (line 68): Moved the UsulanIzinSakit object to its own mock array.
+export const mockIzinSakit: UsulanIzinSakit[] = [
+  { id: 'us4', timestamp: '08/11/2025 09:00:00', nik: '00006079', nama: 'FERDIANSYAH ANUGRAH', seksi: 'QC 45', jenisAjuan: UsulanJenis.IzinSakit, periode: { startDate: '2025-11-10', endDate: '2025-11-10' }, keterangan: 'Demam', linkBerkas: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf', status: UsulanStatus.Disetujui, rolePengaju: UserRole.Pegawai, managerId: 'aswin@example.com' },
+];
+
 export const mockCuti: UsulanCuti[] = [
   { id: 'us1', timestamp: '04/11/2025 16:10:26', nik: '00005950', nama: 'ARMAN NAM', seksi: 'QC 45', jenisAjuan: UsulanJenis.CutiTahunan, periode: { startDate: '2025-11-06', endDate: '2025-11-08' }, keterangan: 'sakit', linkBerkas: 'https://drive.google.com', status: UsulanStatus.Diajukan, sisaCuti: 7, cutiTerpakai: 5, rolePengaju: UserRole.Pegawai, catatanAdmin: 'Sisa Cuti 7 hari', penggantiNik: ['00005999'], managerId: 'aswin@example.com' },
   { id: 'us3', timestamp: '07/11/2025 21:38:29', nik: '00005950', nama: 'ARMAN NAM', seksi: 'QC 45', jenisAjuan: UsulanJenis.CutiTahunan, periode: { startDate: '2025-11-08', endDate: '2025-11-08' }, keterangan: 'sakit', status: UsulanStatus.Diajukan, sisaCuti: 7, cutiTerpakai: 5, rolePengaju: UserRole.Pegawai, managerId: 'aswin@example.com' },
-  { id: 'us4', timestamp: '08/11/2025 09:00:00', nik: '00006079', nama: 'FERDIANSYAH ANUGRAH', seksi: 'QC 45', jenisAjuan: UsulanJenis.IzinSakit, periode: { startDate: '2025-11-10', endDate: '2025-11-10' }, keterangan: 'Demam', linkBerkas: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf', status: UsulanStatus.Disetujui, sisaCuti: 10, cutiTerpakai: 2, rolePengaju: UserRole.Pegawai, managerId: 'aswin@example.com' },
   // Data for Quota Cuti Bawahan demo
   { id: 'us101', timestamp: '15/09/2024 10:00:00', nik: '00004491', nama: 'AMIRUDDIN', seksi: 'QC 45', jenisAjuan: UsulanJenis.CutiTahunan, periode: { startDate: '2024-09-02', endDate: '2024-09-18' }, keterangan: 'Liburan keluarga', status: UsulanStatus.Disetujui, sisaCuti: 0, cutiTerpakai: 17, rolePengaju: UserRole.Pegawai, managerId: 'aswin@example.com' },
   { id: 'us102', timestamp: '10/10/2023 10:00:00', nik: '00004491', nama: 'AMIRUDDIN', seksi: 'QC 45', jenisAjuan: UsulanJenis.CutiBesar, periode: { startDate: '2023-11-01', endDate: '2023-11-08' }, keterangan: 'Acara adat', status: UsulanStatus.Disetujui, sisaCuti: 9, cutiTerpakai: 8, rolePengaju: UserRole.Pegawai, managerId: 'aswin@example.com' },

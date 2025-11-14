@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { UserProfile, JadwalKerja, UsulanCuti, UsulanLembur, Usulan, ShiftConfig, Presensi, UsulanSubstitusi, Seksi, UnitKerja, VendorConfig, UsulanPembetulanPresensi, LeaveQuota, UserRole, UsulanJenis, UsulanStatus } from '../types';
+import { UserProfile, JadwalKerja, UsulanCuti, UsulanLembur, Usulan, ShiftConfig, Presensi, UsulanSubstitusi, Seksi, UnitKerja, VendorConfig, UsulanPembetulanPresensi, LeaveQuota, UserRole, UsulanJenis, UsulanStatus, UsulanIzinSakit } from '../types';
 import { apiService } from '../services/apiService';
 
 // Icons
@@ -44,10 +44,12 @@ const Sidebar: React.FC<{
     { id: 'beranda', title: 'Beranda', icon: <HomeIcon /> },
     { type: 'divider', title: 'Manajemen Ajuan' },
     { id: 'persetujuanCuti', title: 'Persetujuan Cuti', icon: <CalendarIcon /> },
+    { id: 'persetujuanIzinSakit', title: 'Persetujuan Izin/Sakit', icon: <FileTextIcon /> },
     { id: 'persetujuanLembur', title: 'Persetujuan Lembur', icon: <ClockIcon /> },
     { id: 'persetujuanSubstitusi', title: 'Persetujuan Substitusi', icon: <ArrowLeftRightIcon /> },
     { id: 'persetujuanPembetulan', title: 'Persetujuan Pembetulan', icon: <UserCheckIcon /> },
     { type: 'divider', title: 'Manajemen Tim' },
+    { id: 'dataManajemen', title: 'Data Manajemen', icon: <UsersIcon /> },
     { id: 'dataPegawai', title: 'Data Pegawai', icon: <UsersIcon /> },
     { id: 'jadwalShift', title: 'Jadwal Shift Tim', icon: <GridIcon /> },
     { id: 'presensiTim', title: 'Presensi Tim', icon: <UserCheckIcon /> },
@@ -68,10 +70,12 @@ const Sidebar: React.FC<{
     // For Admin, show a restricted set of menus
     if (user.role === UserRole.Admin) {
         const forbiddenIds = new Set([
-            'persetujuanCuti', 
+            'persetujuanCuti',
+            'persetujuanIzinSakit',
             'persetujuanLembur', 
             'persetujuanSubstitusi', 
             'persetujuanPembetulan',
+            'dataManajemen',
             'dataPegawai',
             'konfigurasiShift',
             'konfigurasiSeksi',
@@ -186,8 +190,10 @@ const TopBar: React.FC<{
   const getNotificationIcon = (jenis: UsulanJenis) => {
     switch(jenis) {
       case UsulanJenis.CutiTahunan:
-      case UsulanJenis.IzinSakit:
+      case UsulanJenis.CutiBesar:
         return <CalendarIcon className="w-5 h-5 text-blue-500" />;
+      case UsulanJenis.IzinSakit:
+        return <FileTextIcon className="w-5 h-5 text-green-500" />;
       case UsulanJenis.Lembur:
         return <ClockIcon className="w-5 h-5 text-orange-500" />;
       case UsulanJenis.Substitusi:
@@ -259,6 +265,24 @@ const TopBar: React.FC<{
   );
 };
 
+const getProposalType = (proposal: Usulan): 'cuti' | 'lembur' | 'substitusi' | 'pembetulan' | 'izinSakit' => {
+    switch (proposal.jenisAjuan) {
+        case UsulanJenis.CutiTahunan:
+        case UsulanJenis.CutiBesar:
+            return 'cuti';
+        case UsulanJenis.IzinSakit:
+            return 'izinSakit';
+        case UsulanJenis.Lembur:
+            return 'lembur';
+        case UsulanJenis.Substitusi:
+            return 'substitusi';
+        case UsulanJenis.PembetulanPresensi:
+            return 'pembetulan';
+        default:
+            throw new Error('Unknown proposal type');
+    }
+}
+
 const AdminPage: React.FC<AdminPageProps> = ({ user, onLogout }) => {
     const [activeMenu, setActiveMenu] = useState('beranda');
     const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth >= 768);
@@ -266,9 +290,11 @@ const AdminPage: React.FC<AdminPageProps> = ({ user, onLogout }) => {
     const [isLoading, setIsLoading] = useState(true);
 
     // Data states
-    const [allEmployees, setAllEmployees] = useState<UserProfile[]>([]);
+    const [allManajemen, setAllManajemen] = useState<UserProfile[]>([]);
+    const [allPegawai, setAllPegawai] = useState<UserProfile[]>([]);
     const [allSchedules, setAllSchedules] = useState<JadwalKerja[]>([]);
     const [allCuti, setAllCuti] = useState<UsulanCuti[]>([]);
+    const [allIzinSakit, setAllIzinSakit] = useState<UsulanIzinSakit[]>([]);
     const [allLembur, setAllLembur] = useState<UsulanLembur[]>([]);
     const [allSubstitusi, setAllSubstitusi] = useState<UsulanSubstitusi[]>([]);
     const [allPembetulan, setAllPembetulan] = useState<UsulanPembetulanPresensi[]>([]);
@@ -289,12 +315,14 @@ const AdminPage: React.FC<AdminPageProps> = ({ user, onLogout }) => {
         setIsLoading(true);
         try {
             const [
-                employees, schedules, cuti, lembur, substitusi, pembetulan, presensi,
+                manajemen, pegawai, schedules, cuti, izinSakit, lembur, substitusi, pembetulan, presensi,
                 shiftConfigs, seksi, unitKerja, vendorConfigs, leaveQuotas
             ] = await Promise.all([
-                apiService.getAllUserProfiles(),
+                apiService.getManagementProfiles(),
+                apiService.getPegawaiProfiles(),
                 apiService.getAllJadwal(),
                 apiService.getAllCuti(),
+                apiService.getAllIzinSakit(),
                 apiService.getAllLembur(),
                 apiService.getAllSubstitusi(),
                 apiService.getAllPembetulanPresensi(),
@@ -305,9 +333,11 @@ const AdminPage: React.FC<AdminPageProps> = ({ user, onLogout }) => {
                 apiService.getAllVendorConfigs(),
                 apiService.getAllLeaveQuotas(),
             ]);
-            setAllEmployees(employees);
+            setAllManajemen(manajemen);
+            setAllPegawai(pegawai);
             setAllSchedules(schedules);
             setAllCuti(cuti);
+            setAllIzinSakit(izinSakit);
             setAllLembur(lembur);
             setAllSubstitusi(substitusi);
             setAllPembetulan(pembetulan);
@@ -338,40 +368,41 @@ const AdminPage: React.FC<AdminPageProps> = ({ user, onLogout }) => {
         return () => window.removeEventListener('resize', handleResize);
     }, []);
 
+    const allEmployees = useMemo(() => [...allManajemen, ...allPegawai], [allManajemen, allPegawai]);
+
     const subordinates = useMemo(() => {
         if (user.role === UserRole.SuperAdmin) {
             return allEmployees;
         }
         if (user.role === UserRole.Admin) {
-            return allEmployees.filter(e => e.role === UserRole.Pegawai);
+            return allPegawai;
         }
         if (user.role === UserRole.Manager) {
             return allEmployees.filter(e => e.managerId === user.id || e.id === user.id);
         }
         return [user];
-    }, [user, allEmployees]);
+    }, [user, allEmployees, allPegawai]);
 
     const proposalsForUser = useMemo(() => {
         const subordinateNiks = new Set(subordinates.map(e => e.nik));
-        const allProposals: Usulan[] = [...allCuti, ...allLembur, ...allSubstitusi, ...allPembetulan];
+        const allProposals: Usulan[] = [...allCuti, ...allIzinSakit, ...allLembur, ...allSubstitusi, ...allPembetulan];
         if (user.role === UserRole.SuperAdmin) {
             return allProposals;
         }
         return allProposals.filter(p => subordinateNiks.has(p.nik));
-    }, [subordinates, allCuti, allLembur, allSubstitusi, allPembetulan, user.role]);
+    }, [subordinates, allCuti, allIzinSakit, allLembur, allSubstitusi, allPembetulan, user.role]);
 
     const proposalsForLaporan = useMemo(() => {
-        const combinedProposals = [...allCuti, ...allLembur, ...allSubstitusi];
+        const combinedProposals: Usulan[] = [...allCuti, ...allIzinSakit, ...allLembur, ...allSubstitusi];
         if (user.role === UserRole.Admin) {
-            const pegawaiNiks = new Set(allEmployees.filter(e => e.role === UserRole.Pegawai).map(e => e.nik));
-            return combinedProposals.filter(p => pegawaiNiks.has(p.nik));
+            return combinedProposals.filter(p => allPegawai.some(e => e.nik === p.nik));
         }
         return combinedProposals;
-    }, [user, allEmployees, allCuti, allLembur, allSubstitusi]);
+    }, [user, allPegawai, allCuti, allIzinSakit, allLembur, allSubstitusi]);
 
 
     const handleApprove = async (proposal: Usulan) => {
-        const type = proposal.jenisAjuan === UsulanJenis.Lembur ? 'lembur' : proposal.jenisAjuan === UsulanJenis.Substitusi ? 'substitusi' : proposal.jenisAjuan === UsulanJenis.PembetulanPresensi ? 'pembetulan' : 'cuti';
+        const type = getProposalType(proposal);
         await apiService.updateProposalStatus(proposal.id, type, UsulanStatus.Disetujui);
         setProposalToView(null);
         fetchData();
@@ -384,8 +415,7 @@ const AdminPage: React.FC<AdminPageProps> = ({ user, onLogout }) => {
 
     const handleConfirmReject = async () => {
         if (!proposalToActOn) return;
-        // FIX: Replaced incorrect 'proposal' variable with 'proposalToActOn' to resolve reference error.
-        const type = proposalToActOn.jenisAjuan === UsulanJenis.Lembur ? 'lembur' : proposalToActOn.jenisAjuan === UsulanJenis.Substitusi ? 'substitusi' : proposalToActOn.jenisAjuan === UsulanJenis.PembetulanPresensi ? 'pembetulan' : 'cuti';
+        const type = getProposalType(proposalToActOn);
         const status = rejectionNote ? UsulanStatus.Revisi : UsulanStatus.Ditolak;
         await apiService.updateProposalStatus(proposalToActOn.id, type, status, rejectionNote || 'Ditolak oleh atasan.');
         setIsRejectionModalOpen(false);
@@ -396,26 +426,28 @@ const AdminPage: React.FC<AdminPageProps> = ({ user, onLogout }) => {
     };
 
     const handleApproveCancellation = async (proposal: Usulan) => {
-        if (proposal.jenisAjuan !== UsulanJenis.CutiTahunan && proposal.jenisAjuan !== UsulanJenis.IzinSakit) return;
-        await apiService.updateProposalStatus(proposal.id, 'cuti', UsulanStatus.Dibatalkan, 'Pembatalan disetujui oleh atasan.');
+        const type = getProposalType(proposal);
+        if (type !== 'cuti' && type !== 'izinSakit') return;
+        await apiService.updateProposalStatus(proposal.id, type, UsulanStatus.Dibatalkan, 'Pembatalan disetujui oleh atasan.');
         setProposalToView(null);
         fetchData();
     };
 
     const handleRejectCancellation = async (proposal: Usulan) => {
-        if (proposal.jenisAjuan !== UsulanJenis.CutiTahunan && proposal.jenisAjuan !== UsulanJenis.IzinSakit) return;
-        await apiService.updateProposalStatus(proposal.id, 'cuti', UsulanStatus.Disetujui, 'Pembatalan ditolak oleh atasan.');
+        const type = getProposalType(proposal);
+        if (type !== 'cuti' && type !== 'izinSakit') return;
+        await apiService.updateProposalStatus(proposal.id, type, UsulanStatus.Disetujui, 'Pembatalan ditolak oleh atasan.');
         setProposalToView(null);
         fetchData();
     };
 
     const handleBulkAction = async (ids: string[], action: 'approve' | 'reject') => {
         const status = action === 'approve' ? UsulanStatus.Disetujui : UsulanStatus.Ditolak;
-        const allProposals = [...allCuti, ...allLembur, ...allSubstitusi, ...allPembetulan];
+        const allProposals: Usulan[] = [...allCuti, ...allIzinSakit, ...allLembur, ...allSubstitusi, ...allPembetulan];
         const proposalsToUpdate = allProposals.filter(p => ids.includes(p.id));
 
         for (const p of proposalsToUpdate) {
-            const type = p.jenisAjuan === UsulanJenis.Lembur ? 'lembur' : p.jenisAjuan === UsulanJenis.Substitusi ? 'substitusi' : p.jenisAjuan === UsulanJenis.PembetulanPresensi ? 'pembetulan' : 'cuti';
+            const type = getProposalType(p);
             try {
                 await apiService.updateProposalStatus(p.id, type, status, action === 'reject' ? 'Ditolak massal' : undefined);
             } catch (error) {
@@ -429,8 +461,11 @@ const AdminPage: React.FC<AdminPageProps> = ({ user, onLogout }) => {
         let targetMenu = '';
         switch (proposal.jenisAjuan) {
             case UsulanJenis.CutiTahunan:
-            case UsulanJenis.IzinSakit:
+            case UsulanJenis.CutiBesar:
                 targetMenu = 'persetujuanCuti';
+                break;
+            case UsulanJenis.IzinSakit:
+                targetMenu = 'persetujuanIzinSakit';
                 break;
             case UsulanJenis.Lembur:
                 targetMenu = 'persetujuanLembur';
@@ -466,18 +501,21 @@ const AdminPage: React.FC<AdminPageProps> = ({ user, onLogout }) => {
             case 'beranda':
                 return <DashboardTab proposals={proposalsForUser} employees={subordinates} />;
             case 'persetujuanCuti':
-                return <ProposalsTab title="Persetujuan Cuti" proposals={proposalsForUser.filter(p => p.jenisAjuan === UsulanJenis.CutiTahunan || p.jenisAjuan === UsulanJenis.IzinSakit)} employees={allEmployees} onViewDetails={setProposalToView} onApproveClick={handleApprove} onRejectClick={handleReject} canApprove={true} onPreviewClick={() => {}} onBulkApprove={(ids) => handleBulkAction(ids, 'approve')} onBulkReject={(ids) => handleBulkAction(ids, 'reject')} />;
+                return <ProposalsTab title="Persetujuan Cuti" proposals={proposalsForUser.filter(p => p.jenisAjuan === UsulanJenis.CutiTahunan || p.jenisAjuan === UsulanJenis.CutiBesar)} employees={allEmployees} onViewDetails={setProposalToView} onApproveClick={handleApprove} onRejectClick={handleReject} canApprove={true} onPreviewClick={() => {}} onBulkApprove={(ids) => handleBulkAction(ids, 'approve')} onBulkReject={(ids) => handleBulkAction(ids, 'reject')} />;
+            case 'persetujuanIzinSakit':
+                return <ProposalsTab title="Persetujuan Izin/Sakit" proposals={proposalsForUser.filter(p => p.jenisAjuan === UsulanJenis.IzinSakit)} employees={allEmployees} onViewDetails={setProposalToView} onApproveClick={handleApprove} onRejectClick={handleReject} canApprove={true} onPreviewClick={() => {}} onBulkApprove={(ids) => handleBulkAction(ids, 'approve')} onBulkReject={(ids) => handleBulkAction(ids, 'reject')} />;
             case 'persetujuanLembur':
                 return <ProposalsTab title="Persetujuan Lembur" proposals={proposalsForUser.filter(p => p.jenisAjuan === UsulanJenis.Lembur)} employees={allEmployees} onViewDetails={setProposalToView} onApproveClick={handleApprove} onRejectClick={handleReject} canApprove={true} onPreviewClick={() => {}} onBulkApprove={(ids) => handleBulkAction(ids, 'approve')} onBulkReject={(ids) => handleBulkAction(ids, 'reject')} />;
             case 'persetujuanSubstitusi':
                 return <ProposalsTab title="Persetujuan Substitusi" proposals={proposalsForUser.filter(p => p.jenisAjuan === UsulanJenis.Substitusi)} employees={allEmployees} onViewDetails={setProposalToView} onApproveClick={handleApprove} onRejectClick={handleReject} canApprove={true} onPreviewClick={() => {}} onBulkApprove={(ids) => handleBulkAction(ids, 'approve')} onBulkReject={(ids) => handleBulkAction(ids, 'reject')} />;
             case 'persetujuanPembetulan':
                 return <ProposalsTab title="Persetujuan Pembetulan" proposals={proposalsForUser.filter(p => p.jenisAjuan === UsulanJenis.PembetulanPresensi)} employees={allEmployees} onViewDetails={setProposalToView} onApproveClick={handleApprove} onRejectClick={handleReject} canApprove={true} onPreviewClick={() => {}} onBulkApprove={(ids) => handleBulkAction(ids, 'approve')} onBulkReject={(ids) => handleBulkAction(ids, 'reject')} />;
+            case 'dataManajemen':
+                return <EmployeesTab employees={allManajemen} allEmployees={allEmployees} allSeksi={allSeksi} allUnitKerja={allUnitKerja} onDataChange={fetchData} mode="manajemen" />;
             case 'dataPegawai':
-                return <EmployeesTab employees={allEmployees} allSeksi={allSeksi} allUnitKerja={allUnitKerja} onDataChange={fetchData} />;
+                return <EmployeesTab employees={allPegawai} allEmployees={allEmployees} allSeksi={allSeksi} allUnitKerja={allUnitKerja} onDataChange={fetchData} mode="pegawai" />;
             case 'jadwalShift':
-                const pegawaiForShiftView = allEmployees.filter(e => e.role === UserRole.Pegawai);
-                return <ShiftScheduleView schedules={allSchedules} employees={pegawaiForShiftView} shiftConfigs={allShiftConfigs} showAdminControls onDataChange={fetchData} allSeksi={allSeksi} allUnitKerja={allUnitKerja} />;
+                return <ShiftScheduleView schedules={allSchedules} employees={allPegawai} shiftConfigs={allShiftConfigs} showAdminControls onDataChange={fetchData} allSeksi={allSeksi} allUnitKerja={allUnitKerja} />;
             case 'presensiTim':
                 return <AdminPresensiTab allPresensi={allPresensi} schedules={allSchedules} employees={subordinates} shiftConfigs={allShiftConfigs} loggedInUser={user} allPembetulanPresensi={allPembetulan} />;
             case 'laporan':
