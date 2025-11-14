@@ -76,9 +76,9 @@ export interface BaseUsulan {
   managerId?: string; // ID of the manager who needs to approve
 }
 
-// Interface for Cuti and Izin/Sakit
+// Interface for Cuti Tahunan/Besar
 export interface UsulanCuti extends BaseUsulan {
-  jenisAjuan: UsulanJenis.CutiTahunan | UsulanJenis.IzinSakit | UsulanJenis.CutiBesar;
+  jenisAjuan: UsulanJenis.CutiTahunan | UsulanJenis.CutiBesar;
   periode: {
     startDate: string; // YYYY-MM-DD
     endDate: string;   // YYYY-MM-DD
@@ -89,6 +89,18 @@ export interface UsulanCuti extends BaseUsulan {
   cutiTerpakai: number;
   penggantiNik?: string[];
 }
+
+// New Interface for Izin/Sakit
+export interface UsulanIzinSakit extends BaseUsulan {
+    jenisAjuan: UsulanJenis.IzinSakit;
+    periode: {
+        startDate: string; // YYYY-MM-DD
+        endDate: string;   // YYYY-MM-DD
+    };
+    keterangan: string;
+    linkBerkas?: string;
+}
+
 
 // Interface for Lembur
 export interface UsulanLembur extends BaseUsulan {
@@ -123,7 +135,7 @@ export interface UsulanPembetulanPresensi extends BaseUsulan {
 }
 
 // A union type for components that might handle both
-export type Usulan = UsulanCuti | UsulanLembur | UsulanSubstitusi | UsulanPembetulanPresensi;
+export type Usulan = UsulanCuti | UsulanIzinSakit | UsulanLembur | UsulanSubstitusi | UsulanPembetulanPresensi;
 
 
 export interface ShiftConfig {
