@@ -489,8 +489,44 @@ const PegawaiPage: React.FC<PegawaiPageProps> = ({ user, onLogout }) => {
     const handleAttendanceSuccess = (message: string) => {
         setIsAttendanceModalOpen(false);
         setAlert({ message, type: 'success' });
-        fetchData();
+
+        // Optimistic UI Update
+        const now = new Date();
+        const getLocalDDMMYYYY = (date: Date): string => {
+            const day = String(date.getDate()).padStart(2, '0');
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const year = date.getFullYear();
+            return `${day}/${month}/${year}`;
+        };
+        const todayStr = getLocalDDMMYYYY(now);
+        const todaySchedule = jadwal.find(j => j.tanggal === todayStr);
+
+        if (attendanceAction === 'in') {
+            const newPresensi: Presensi = {
+                id: `temp-${now.getTime()}`,
+                nik: user.nik,
+                nama: user.name,
+                tanggal: todayStr,
+                shift: todaySchedule?.shift || 'OFF',
+                clockInTimestamp: { toDate: () => now },
+            };
+            setPresensi(prev => [...prev.filter(p => p.tanggal !== todayStr), newPresensi]);
+        } else { // 'out'
+            setPresensi(prev => prev.map(p => {
+                if (p.tanggal === todayStr) {
+                    const clockInTime = p.clockInTimestamp.toDate();
+                    const totalHours = (now.getTime() - clockInTime.getTime()) / (1000 * 60 * 60);
+                    return { 
+                        ...p, 
+                        clockOutTimestamp: { toDate: () => now },
+                        totalHours: parseFloat(totalHours.toFixed(2))
+                    };
+                }
+                return p;
+            }));
+        }
     };
+
 
     const handleAttendanceError = (message: string) => {
         setIsAttendanceModalOpen(false);
@@ -577,12 +613,14 @@ const PegawaiPage: React.FC<PegawaiPageProps> = ({ user, onLogout }) => {
                         initialTab="pembatalan"
                     />;
         case 'lembur':
+            // FIX: Pass the 'usulanIzinSakit' prop to the LemburView component.
             return <LemburView 
                         user={user}
                         onAdd={() => { setEditingLembur(null); setIsLemburModalOpen(true); }} 
                         onEdit={handleEditLembur}
                         usulanLembur={usulanLembur} 
                         usulanCuti={usulanCuti}
+                        usulanIzinSakit={usulanIzinSakit}
                         usulanPembetulan={usulanPembetulan}
                         jadwal={jadwal}
                         shiftConfigs={shiftConfigs}
@@ -609,12 +647,14 @@ const PegawaiPage: React.FC<PegawaiPageProps> = ({ user, onLogout }) => {
         case 'presensi':
              return pegawai ? <PresensiHistoryView presensiHistory={presensi} schedules={jadwal} employee={pegawai} shiftConfigs={shiftConfigs} loggedInUser={user} pembetulanHistory={usulanPembetulan} /> : <p>Loading...</p>;
         case 'laporanPresensi':
+            // FIX: Pass the 'usulanIzinSakit' prop to the LaporanPresensiPage component.
             return <LaporanPresensiPage
                         user={user}
                         jadwal={jadwal}
                         presensi={presensi}
                         usulanLembur={usulanLembur}
                         usulanCuti={usulanCuti}
+                        usulanIzinSakit={usulanIzinSakit}
                         shiftConfigs={shiftConfigs}
                         vendorConfigs={vendorConfigs}
                     />;

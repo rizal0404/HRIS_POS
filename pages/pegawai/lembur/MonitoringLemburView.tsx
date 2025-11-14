@@ -4,7 +4,7 @@ declare const html2canvas: any;
 
 import React, { useState, useMemo, useRef } from 'react';
 import ReactDOM from 'react-dom/client';
-import { UserProfile, UsulanLembur, UsulanCuti, JadwalKerja, ShiftConfig, UsulanStatus, Presensi, UsulanPembetulanPresensi, VendorConfig } from '../../../types';
+import { UserProfile, UsulanLembur, UsulanCuti, JadwalKerja, ShiftConfig, UsulanStatus, Presensi, UsulanPembetulanPresensi, VendorConfig, UsulanIzinSakit } from '../../../types';
 import { SearchIcon, PrintIcon } from '../../../components/Icons';
 
 const monthNames = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
@@ -24,7 +24,7 @@ const PrintableReport = React.forwardRef<HTMLDivElement, {
 
     const polaShift = [...new Set(reportData.map(d => {
         const shift = d.shift?.toUpperCase();
-        if (shift && !['LIBUR', 'OFF', 'CUTI'].includes(shift)) {
+        if (shift && !['LIBUR', 'OFF', 'CUTI', 'SAKIT'].includes(shift)) {
             return shift;
         }
         return null;
@@ -127,6 +127,7 @@ interface MonitoringLemburViewProps {
     user: UserProfile;
     usulanLembur: UsulanLembur[];
     usulanCuti: UsulanCuti[];
+    usulanIzinSakit: UsulanIzinSakit[];
     usulanPembetulan: UsulanPembetulanPresensi[];
     jadwal: JadwalKerja[];
     shiftConfigs: ShiftConfig[];
@@ -134,7 +135,7 @@ interface MonitoringLemburViewProps {
     vendorConfigs: VendorConfig[];
 }
 
-export const MonitoringLemburView: React.FC<MonitoringLemburViewProps> = ({ user, usulanLembur, usulanCuti, usulanPembetulan, jadwal, shiftConfigs, presensi, vendorConfigs }) => {
+export const MonitoringLemburView: React.FC<MonitoringLemburViewProps> = ({ user, usulanLembur, usulanCuti, usulanIzinSakit, usulanPembetulan, jadwal, shiftConfigs, presensi, vendorConfigs }) => {
     const [selectedMonth, setSelectedMonth] = useState(10); // November (0-indexed)
     const [selectedYear, setSelectedYear] = useState(2025);
     const [isDownloading, setIsDownloading] = useState(false);
@@ -154,6 +155,7 @@ export const MonitoringLemburView: React.FC<MonitoringLemburViewProps> = ({ user
             let presensiRecord = presensi.find(p => p.tanggal === dateStringDDMMYYYY);
             const lemburRecord = usulanLembur.find(l => l.tanggalLembur === dateStringYYYYMMDD && l.status === UsulanStatus.Disetujui);
             const cutiRecord = usulanCuti.find(c => c.status === UsulanStatus.Disetujui && date >= new Date(c.periode.startDate + 'T00:00:00') && date <= new Date(c.periode.endDate + 'T00:00:00'));
+            const izinSakitRecord = usulanIzinSakit.find(c => c.status === UsulanStatus.Disetujui && date >= new Date(c.periode.startDate + 'T00:00:00') && date <= new Date(c.periode.endDate + 'T00:00:00'));
             
             const approvedCorrections = usulanPembetulan.filter(p => p.tanggalPembetulan === dateStringYYYYMMDD && p.status === UsulanStatus.Disetujui);
             if (approvedCorrections.length > 0) {
@@ -166,15 +168,12 @@ export const MonitoringLemburView: React.FC<MonitoringLemburViewProps> = ({ user
             }
 
             const shiftInfo = schedule ? shiftMap.get(schedule.shift) : null;
-            const [regulerMasuk, regulerPulang] = (schedule?.shift === 'OFF' || cutiRecord) ? ['OFF', 'OFF'] : (shiftInfo?.time.split('-') || ['', '']);
+            const [regulerMasuk, regulerPulang] = (schedule?.shift === 'OFF' || cutiRecord || izinSakitRecord) ? ['OFF', 'OFF'] : (shiftInfo?.time.split('-') || ['', '']);
 
             const formatTime = (ts: any) => ts ? new Date(ts.toDate()).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace(/\./g,':') : '';
-            const jamAktual = cutiRecord ? 'Cuti' : (presensiRecord ? `${formatTime(presensiRecord.clockInTimestamp)} - ${formatTime(presensiRecord.clockOutTimestamp)}`.replace(/^ - $/, '') : '');
+            const jamAktual = cutiRecord ? 'Cuti' : (izinSakitRecord ? 'Izin/Sakit' : (presensiRecord ? `${formatTime(presensiRecord.clockInTimestamp)} - ${formatTime(presensiRecord.clockOutTimestamp)}`.replace(/^ - $/, '') : ''));
 
-            let keterangan = '';
-            if (cutiRecord) {
-                keterangan = cutiRecord.jenisAjuan;
-            }
+            let keterangan = cutiRecord ? cutiRecord.jenisAjuan : (izinSakitRecord ? 'Izin/Sakit' : '');
             if (lemburRecord) {
                 if (keterangan) {
                     keterangan += '; Lembur';
@@ -208,14 +207,14 @@ export const MonitoringLemburView: React.FC<MonitoringLemburViewProps> = ({ user
                 lemburMulai: lemburRecord?.jamAwal || '',
                 lemburSelesai: lemburRecord?.jamAkhir || '',
                 jamLembur: jamLemburDisplay,
-                uraianPekerjaan: lemburRecord?.keteranganLembur || (cutiRecord ? 'pangkep' : ''),
-                menyetujui: lemburRecord ? (user.manager?.name || 'SUPER ADMIN') : (cutiRecord ? (user.manager?.name || '') : ''),
+                uraianPekerjaan: lemburRecord?.keteranganLembur || (cutiRecord || izinSakitRecord ? 'pangkep' : ''),
+                menyetujui: lemburRecord || cutiRecord || izinSakitRecord ? (user.manager?.name || 'SUPER ADMIN') : '',
                 keterangan: keterangan,
-                shift: schedule?.shift || (cutiRecord ? 'CUTI' : 'OFF'),
+                shift: schedule?.shift || (cutiRecord ? 'CUTI' : (izinSakitRecord ? 'SAKIT' : 'OFF')),
             });
         }
         return data;
-    }, [user, selectedMonth, selectedYear, jadwal, presensi, usulanLembur, usulanCuti, usulanPembetulan, shiftMap]);
+    }, [user, selectedMonth, selectedYear, jadwal, presensi, usulanLembur, usulanCuti, usulanIzinSakit, usulanPembetulan, shiftMap]);
     
     const handleDownload = async () => {
         setIsDownloading(true);
