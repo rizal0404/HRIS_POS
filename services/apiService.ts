@@ -1,6 +1,4 @@
 
-
-
 import { supabase } from './supabase';
 import { UserProfile, JadwalKerja, UsulanCuti, UsulanLembur, Usulan, UsulanStatus, ShiftConfig, Presensi, UsulanSubstitusi, Seksi, UnitKerja, VendorConfig, UsulanJenis, UsulanPembetulanPresensi, LeaveQuota, UsulanIzinSakit } from '../types';
 // Fix: Import mockUserProfiles for the seeder function.
@@ -384,12 +382,36 @@ export const apiService = {
   },
 
   getUserProfileById: async (id: string): Promise<UserProfile | null> => {
-    const { data: mgmtProfile } = await supabase
-        .from('manajemen_profiles').select('*, manager:manager_id(name)').eq('id', id).single();
-    if (mgmtProfile) return mapProfileToCamelCase(mgmtProfile);
+    // Try fetching from management profiles first
+    const { data: mgmtProfile, error: mgmtError } = await supabase
+        .from('manajemen_profiles')
+        .select('*, manager:manager_id(name)')
+        .eq('id', id)
+        .single();
     
-    const { data: pegawaiProfile } = await supabase
-        .from('pegawai_profiles').select('*, manager:manager_id(name)').eq('id', id).single();
+    // If an error occurred that ISN'T a "not found" error, we should throw it.
+    if (mgmtError && mgmtError.code !== 'PGRST116') {
+        handleSupabaseError(mgmtError, 'getUserProfileById (manajemen)');
+    }
+
+    // If we found a profile, return it.
+    if (mgmtProfile) {
+        return mapProfileToCamelCase(mgmtProfile);
+    }
+    
+    // If not found in management, try fetching from pegawai profiles
+    const { data: pegawaiProfile, error: pegawaiError } = await supabase
+        .from('pegawai_profiles')
+        .select('*, manager:manager_id(name)')
+        .eq('id', id)
+        .single();
+    
+    // Again, handle any unexpected errors.
+    if (pegawaiError && pegawaiError.code !== 'PGRST116') {
+        handleSupabaseError(pegawaiError, 'getUserProfileById (pegawai)');
+    }
+    
+    // Return the pegawai profile (or null if not found here either).
     return mapProfileToCamelCase(pegawaiProfile);
   },
 
