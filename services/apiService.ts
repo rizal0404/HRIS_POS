@@ -32,6 +32,14 @@ const handleSupabaseError = (error: any, context: string) => {
 
 // --- HELPER FUNCTIONS for data mapping and formatting ---
 
+// Gets the local date and formats it to YYYY-MM-DD for Supabase 'date' column
+const getLocalYYYYMMDD = (date: Date): string => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+};
+
 // Converts YYYY-MM-DD from Supabase to DD/MM/YYYY for the frontend
 const formatDateFromSupabase = (dateStr: string | null): string => {
     if (!dateStr) return '';
@@ -736,7 +744,7 @@ export const apiService = {
         }
     }
     
-    const todayYYYYMMDD = new Date().toISOString().split('T')[0];
+    const todayYYYYMMDD = getLocalYYYYMMDD(new Date());
     const { data: existingRecord, error: fetchError } = await supabase.from('presensi').select('*').eq('nik', user.nik).eq('tanggal', todayYYYYMMDD).maybeSingle();
     if (fetchError && fetchError.code === '42P01') {
         const userMessage = "Tabel 'presensi' tidak ditemukan. Gagal menyimpan data presensi. Silakan hubungi administrator untuk membuat tabel di database.";

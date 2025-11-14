@@ -521,9 +521,10 @@ const AdminPage: React.FC<AdminPageProps> = ({ user, onLogout }) => {
             case 'laporan':
                 return <LaporanTab proposals={proposalsForLaporan} />;
             case 'laporanPresensi':
-                return <LaporanPresensiTab employees={subordinates} allSchedules={allSchedules} allPresensi={allPresensi} allLembur={allLembur} allCuti={allCuti} allShiftConfigs={allShiftConfigs} allVendorConfigs={allVendorConfigs} allPembetulan={allPembetulan} />;
+                // FIX: Pass the 'allIzinSakit' prop to the LaporanPresensiTab component.
+                return <LaporanPresensiTab employees={subordinates} allSchedules={allSchedules} allPresensi={allPresensi} allLembur={allLembur} allCuti={allCuti} allIzinSakit={allIzinSakit} allShiftConfigs={allShiftConfigs} allVendorConfigs={allVendorConfigs} allPembetulan={allPembetulan} />;
             case 'monitoringLembur':
-                return <LemburMonitoringTab employeesForDropdown={subordinates} allUsulanLembur={allLembur} allUsulanCuti={allCuti} allUsulanPembetulan={allPembetulan} allSchedules={allSchedules} allShiftConfigs={allShiftConfigs} allPresensi={allPresensi} allEmployees={allEmployees} allVendorConfigs={allVendorConfigs} />;
+                return <LemburMonitoringTab employeesForDropdown={subordinates} allUsulanLembur={allLembur} allUsulanCuti={allCuti} allUsulanIzinSakit={allIzinSakit} allUsulanPembetulan={allPembetulan} allSchedules={allSchedules} allShiftConfigs={allShiftConfigs} allPresensi={allPresensi} allEmployees={allEmployees} allVendorConfigs={allVendorConfigs} />;
             case 'rekapLembur':
                 return <RekapLemburBawahanTab employees={subordinates} allLembur={allLembur} />;
             case 'quotaCuti':

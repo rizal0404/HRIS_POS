@@ -3,7 +3,7 @@ declare const jspdf: any;
 declare const html2canvas: any;
 
 import React, { useState, useMemo, useRef } from 'react';
-import { UserProfile, JadwalKerja, Presensi, ShiftConfig, UsulanLembur, UsulanCuti, UsulanStatus, VendorConfig } from '../../types';
+import { UserProfile, JadwalKerja, Presensi, ShiftConfig, UsulanLembur, UsulanCuti, UsulanStatus, VendorConfig, UsulanIzinSakit } from '../../types';
 import { SearchIcon, PrintIcon } from '../../components/Icons';
 
 const monthNames = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
@@ -16,12 +16,13 @@ interface LaporanPresensiPageProps {
     presensi: Presensi[];
     usulanLembur: UsulanLembur[];
     usulanCuti: UsulanCuti[];
+    usulanIzinSakit: UsulanIzinSakit[];
     shiftConfigs: ShiftConfig[];
     // FIX: Add 'vendorConfigs' prop to match usage in PegawaiPage.tsx.
     vendorConfigs: VendorConfig[];
 }
 
-export const LaporanPresensiPage: React.FC<LaporanPresensiPageProps> = ({ user, jadwal, presensi, usulanLembur, usulanCuti, shiftConfigs }) => {
+export const LaporanPresensiPage: React.FC<LaporanPresensiPageProps> = ({ user, jadwal, presensi, usulanLembur, usulanCuti, usulanIzinSakit, shiftConfigs }) => {
     const [selectedMonth, setSelectedMonth] = useState(10); // November (0-indexed)
     const [selectedYear, setSelectedYear] = useState(2025);
     const reportRef = useRef<HTMLDivElement>(null);
@@ -36,19 +37,19 @@ export const LaporanPresensiPage: React.FC<LaporanPresensiPageProps> = ({ user, 
         for (let i = 1; i <= daysInMonth; i++) {
             const date = new Date(selectedYear, selectedMonth, i);
             const dateStringDDMMYYYY = `${String(i).padStart(2, '0')}/${String(selectedMonth + 1).padStart(2, '0')}/${selectedYear}`;
-            const dateStringYYYYMMDD = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
             
             const schedule = jadwal.find(j => j.tanggal === dateStringDDMMYYYY);
             const presensiRecord = presensi.find(p => p.tanggal === dateStringDDMMYYYY);
-            const lemburRecord = usulanLembur.find(l => l.tanggalLembur === dateStringYYYYMMDD && l.status === UsulanStatus.Disetujui);
+            const lemburRecord = usulanLembur.find(l => l.tanggalLembur === date.toISOString().split('T')[0] && l.status === UsulanStatus.Disetujui);
             const cutiRecord = usulanCuti.find(c => c.status === UsulanStatus.Disetujui && date >= new Date(c.periode.startDate + 'T00:00:00') && date <= new Date(c.periode.endDate + 'T00:00:00'));
+            const izinSakitRecord = usulanIzinSakit.find(c => c.status === UsulanStatus.Disetujui && date >= new Date(c.periode.startDate + 'T00:00:00') && date <= new Date(c.periode.endDate + 'T00:00:00'));
             
             const shiftInfo = schedule ? shiftMap.get(schedule.shift) : null;
             const [regulerMasuk, regulerPulang] = shiftInfo?.time.split('-') || ['', ''];
 
             const formatTime = (ts: any) => ts ? new Date(ts.toDate()).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '';
 
-            let keterangan = cutiRecord ? cutiRecord.jenisAjuan : (schedule?.shift === 'OFF' ? 'Libur' : '');
+            let keterangan = cutiRecord ? cutiRecord.jenisAjuan : (izinSakitRecord ? 'Izin/Sakit' : (schedule?.shift === 'OFF' ? 'Libur' : ''));
             if (lemburRecord) {
                 if (keterangan && keterangan !== 'Libur') {
                     keterangan = `${keterangan}; Lembur`;
@@ -76,7 +77,7 @@ export const LaporanPresensiPage: React.FC<LaporanPresensiPageProps> = ({ user, 
                 no: i,
                 nik: user.nik,
                 tanggal: date.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }),
-                shift: schedule?.shift || (cutiRecord ? 'CUTI' : 'Libur'),
+                shift: schedule?.shift || (cutiRecord ? 'CUTI' : (izinSakitRecord ? 'SAKIT' : 'Libur')),
                 regulerMasuk,
                 regulerPulang,
                 realisasiMasuk: formatTime(presensiRecord?.clockInTimestamp),
@@ -92,7 +93,7 @@ export const LaporanPresensiPage: React.FC<LaporanPresensiPageProps> = ({ user, 
             });
         }
         return data;
-    }, [user.nik, selectedMonth, selectedYear, jadwal, presensi, usulanLembur, usulanCuti, shiftMap]);
+    }, [user.nik, selectedMonth, selectedYear, jadwal, presensi, usulanLembur, usulanCuti, usulanIzinSakit, shiftMap]);
 
     const handleDownload = async () => {
         if (!reportRef.current) return;

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { UsulanLembur, UsulanCuti, JadwalKerja, ShiftConfig, UserProfile, Presensi, VendorConfig, UsulanPembetulanPresensi } from '../../types';
+import { UsulanLembur, UsulanCuti, JadwalKerja, ShiftConfig, UserProfile, Presensi, VendorConfig, UsulanPembetulanPresensi, UsulanIzinSakit } from '../../types';
 import { DataLemburTab } from './lembur/DataLemburTab';
 import { MonitoringLemburView } from './lembur/MonitoringLemburView';
 
@@ -9,6 +9,7 @@ interface LemburViewProps {
     onEdit: (lembur: UsulanLembur) => void;
     usulanLembur: UsulanLembur[];
     usulanCuti: UsulanCuti[];
+    usulanIzinSakit: UsulanIzinSakit[];
     usulanPembetulan: UsulanPembetulanPresensi[];
     jadwal: JadwalKerja[];
     shiftConfigs: ShiftConfig[];
@@ -69,6 +70,7 @@ export const LemburView: React.FC<LemburViewProps> = (props) => {
                             user={props.user}
                             usulanLembur={props.usulanLembur}
                             usulanCuti={props.usulanCuti}
+                            usulanIzinSakit={props.usulanIzinSakit}
                             usulanPembetulan={props.usulanPembetulan}
                             jadwal={props.jadwal}
                             shiftConfigs={props.shiftConfigs}

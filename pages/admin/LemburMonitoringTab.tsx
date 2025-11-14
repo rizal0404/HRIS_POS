@@ -4,7 +4,7 @@ declare const html2canvas: any;
 
 import React, { useState, useMemo, useRef } from 'react';
 import ReactDOM from 'react-dom/client';
-import { UserProfile, JadwalKerja, Presensi, ShiftConfig, UsulanLembur, UsulanCuti, UsulanStatus, UsulanPembetulanPresensi, VendorConfig } from '../../types';
+import { UserProfile, JadwalKerja, Presensi, ShiftConfig, UsulanLembur, UsulanCuti, UsulanStatus, UsulanPembetulanPresensi, VendorConfig, UsulanIzinSakit } from '../../types';
 import { SearchIcon, PrintIcon } from '../../components/Icons';
 
 const monthNames = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
@@ -24,7 +24,7 @@ const PrintableReport = React.forwardRef<HTMLDivElement, {
 
     const polaShift = [...new Set(reportData.map(d => {
         const shift = d.shift?.toUpperCase();
-        if (shift && !['LIBUR', 'OFF', 'CUTI'].includes(shift)) {
+        if (shift && !['LIBUR', 'OFF', 'CUTI', 'SAKIT'].includes(shift)) {
             return shift;
         }
         return null;
@@ -127,6 +127,7 @@ interface LemburMonitoringTabProps {
     employeesForDropdown: UserProfile[];
     allUsulanLembur: UsulanLembur[];
     allUsulanCuti: UsulanCuti[];
+    allUsulanIzinSakit: UsulanIzinSakit[];
     allUsulanPembetulan: UsulanPembetulanPresensi[];
     allSchedules: JadwalKerja[];
     allShiftConfigs: ShiftConfig[];
@@ -139,6 +140,7 @@ export const LemburMonitoringTab: React.FC<LemburMonitoringTabProps> = ({
     employeesForDropdown,
     allUsulanLembur,
     allUsulanCuti,
+    allUsulanIzinSakit,
     allUsulanPembetulan,
     allSchedules,
     allShiftConfigs,
@@ -150,6 +152,8 @@ export const LemburMonitoringTab: React.FC<LemburMonitoringTabProps> = ({
     const [selectedMonth, setSelectedMonth] = useState(10); // November
     const [selectedYear, setSelectedYear] = useState(2025);
     const [isDownloading, setIsDownloading] = useState(false);
+    // FIX: Define 'reportRef' using useRef to fix "Cannot find name 'reportRef'" error.
+    const reportRef = useRef<HTMLDivElement>(null);
 
     const shiftMap = useMemo(() => new Map(allShiftConfigs.map(sc => [sc.code, sc])), [allShiftConfigs]);
 
@@ -163,6 +167,7 @@ export const LemburMonitoringTab: React.FC<LemburMonitoringTabProps> = ({
         const presensi = allPresensi.filter(p => p.nik === selectedNik);
         const lembur = allUsulanLembur.filter(l => l.nik === selectedNik);
         const cuti = allUsulanCuti.filter(c => c.nik === selectedNik);
+        const izinSakit = allUsulanIzinSakit.filter(i => i.nik === selectedNik);
         const pembetulan = allUsulanPembetulan.filter(p => p.nik === selectedNik);
 
         const daysInMonth = new Date(selectedYear, selectedMonth + 1, 0).getDate();
@@ -177,6 +182,7 @@ export const LemburMonitoringTab: React.FC<LemburMonitoringTabProps> = ({
             let presensiRecord = presensi.find(p => p.tanggal === dateStringDDMMYYYY);
             const lemburRecord = lembur.find(l => l.tanggalLembur === dateStringYYYYMMDD && l.status === UsulanStatus.Disetujui);
             const cutiRecord = cuti.find(c => c.status === UsulanStatus.Disetujui && date >= new Date(c.periode.startDate + 'T00:00:00') && date <= new Date(c.periode.endDate + 'T00:00:00'));
+            const izinSakitRecord = izinSakit.find(c => c.status === UsulanStatus.Disetujui && date >= new Date(c.periode.startDate + 'T00:00:00') && date <= new Date(c.periode.endDate + 'T00:00:00'));
             
             const approvedCorrections = pembetulan.filter(p => p.tanggalPembetulan === dateStringYYYYMMDD && p.status === UsulanStatus.Disetujui);
             if (approvedCorrections.length > 0) {
@@ -189,15 +195,12 @@ export const LemburMonitoringTab: React.FC<LemburMonitoringTabProps> = ({
             }
 
             const shiftInfo = schedule ? shiftMap.get(schedule.shift) : null;
-            const [regulerMasuk, regulerPulang] = (schedule?.shift === 'OFF' || cutiRecord) ? ['OFF', 'OFF'] : (shiftInfo?.time.split('-') || ['', '']);
+            const [regulerMasuk, regulerPulang] = (schedule?.shift === 'OFF' || cutiRecord || izinSakitRecord) ? ['OFF', 'OFF'] : (shiftInfo?.time.split('-') || ['', '']);
 
             const formatTime = (ts: any) => ts ? new Date(ts.toDate()).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace(/\./g,':') : '';
-            const jamAktual = cutiRecord ? 'Cuti' : (presensiRecord ? `${formatTime(presensiRecord.clockInTimestamp)} - ${formatTime(presensiRecord.clockOutTimestamp)}`.replace(/^ - $/, '') : '');
+            const jamAktual = cutiRecord ? 'Cuti' : (izinSakitRecord ? 'Izin/Sakit' : (presensiRecord ? `${formatTime(presensiRecord.clockInTimestamp)} - ${formatTime(presensiRecord.clockOutTimestamp)}`.replace(/^ - $/, '') : ''));
 
-            let keterangan = '';
-            if (cutiRecord) {
-                keterangan = cutiRecord.jenisAjuan;
-            }
+            let keterangan = cutiRecord ? cutiRecord.jenisAjuan : (izinSakitRecord ? 'Izin/Sakit' : '');
             if (lemburRecord) {
                 if (keterangan) {
                     keterangan += '; Lembur';
@@ -231,82 +234,72 @@ export const LemburMonitoringTab: React.FC<LemburMonitoringTabProps> = ({
                 lemburMulai: lemburRecord?.jamAwal || '',
                 lemburSelesai: lemburRecord?.jamAkhir || '',
                 jamLembur: jamLemburDisplay,
-                uraianPekerjaan: lemburRecord?.keteranganLembur || (cutiRecord ? 'pangkep' : ''),
-                menyetujui: lemburRecord ? (employee.manager?.name || 'SUPER ADMIN') : (cutiRecord ? (employee.manager?.name || '') : ''),
+                uraianPekerjaan: lemburRecord?.keteranganLembur || (cutiRecord || izinSakitRecord ? 'pangkep' : ''),
+                menyetujui: lemburRecord || cutiRecord || izinSakitRecord ? (employee.manager?.name || 'SUPER ADMIN') : '',
                 keterangan: keterangan,
-                shift: schedule?.shift || (cutiRecord ? 'CUTI' : 'OFF'),
+                shift: schedule?.shift || (cutiRecord ? 'CUTI' : (izinSakitRecord ? 'SAKIT' : 'OFF')),
             });
         }
         return { reportData: data, selectedEmployee: employee };
-    }, [selectedNik, selectedMonth, selectedYear, allEmployees, allSchedules, allPresensi, allUsulanLembur, allUsulanCuti, allUsulanPembetulan, shiftMap]);
+    }, [selectedNik, selectedMonth, selectedYear, allEmployees, allSchedules, allPresensi, allUsulanLembur, allUsulanCuti, allUsulanIzinSakit, shiftMap, allUsulanPembetulan]);
 
     const handleDownload = async () => {
-        if (!selectedEmployee) return;
+        if (!reportRef.current || !selectedEmployee) return;
         setIsDownloading(true);
-        const hiddenPrintDiv = document.createElement('div');
-        hiddenPrintDiv.style.position = 'fixed';
-        hiddenPrintDiv.style.top = '0';
-        hiddenPrintDiv.style.left = '0';
-        hiddenPrintDiv.style.width = '794px';
-        hiddenPrintDiv.style.zIndex = '-1';
-        hiddenPrintDiv.style.opacity = '0';
-        hiddenPrintDiv.style.pointerEvents = 'none';
-        document.body.appendChild(hiddenPrintDiv);
-
-        const root = ReactDOM.createRoot(hiddenPrintDiv);
-
-        root.render(
-            <PrintableReport
-                reportData={reportData}
-                employee={selectedEmployee}
-                vendor={allVendorConfigs[0]}
-            />
-        );
-
-        await document.fonts.ready;
-        await new Promise(resolve => setTimeout(resolve, 500)); // Small delay for rendering
-
         try {
             const { jsPDF } = jspdf;
-            const reportElement = hiddenPrintDiv.children[0] as HTMLElement;
+            const reportContentElement = reportRef.current;
+            if (!reportContentElement) throw new Error("Report element not found");
 
-            const canvas = await html2canvas(reportElement, {
+            const canvas = await html2canvas(reportContentElement, {
                 scale: 2,
                 useCORS: true,
                 logging: false,
-                width: reportElement.scrollWidth,
-                height: reportElement.scrollHeight,
-                windowWidth: reportElement.scrollWidth,
-                windowHeight: reportElement.scrollHeight,
+                width: reportContentElement.scrollWidth,
+                height: reportContentElement.scrollHeight,
             });
             const imgData = canvas.toDataURL('image/png');
-            
-            const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-            const pdfPageWidth = pdf.internal.pageSize.getWidth();
-            const pdfPageHeight = pdf.internal.pageSize.getHeight();
-            
+
+            const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+            const pdfWidth = pdf.internal.pageSize.getWidth();
+            const pdfHeight = pdf.internal.pageSize.getHeight();
+            const margin = 10;
+            const headerHeight = 15;
+
+            // Add header text
+            pdf.setFontSize(16);
+            pdf.text('Laporan Presensi', pdfWidth / 2, margin, { align: 'center' });
+            pdf.setFontSize(10);
+            pdf.text(`${selectedEmployee.name} (${selectedEmployee.nik})`, margin, margin + 10);
+            pdf.text(`Periode: ${monthNames[selectedMonth]} ${selectedYear}`, pdfWidth - margin, margin + 10, { align: 'right' });
+
+            // Calculate available content area
+            const availableWidth = pdfWidth - (margin * 2);
+            const availableHeight = pdfHeight - (margin * 2) - headerHeight;
+
             const imgProps = pdf.getImageProperties(imgData);
             const imgAspectRatio = imgProps.width / imgProps.height;
-            
-            let finalImgWidth = pdfPageWidth - 20; // with margin
-            let finalImgHeight = finalImgWidth / imgAspectRatio;
-            
-            if (finalImgHeight > pdfPageHeight - 20) {
-                finalImgHeight = pdfPageHeight - 20;
+            const pageAspectRatio = availableWidth / availableHeight;
+
+            let finalImgWidth, finalImgHeight;
+
+            if (imgAspectRatio > pageAspectRatio) {
+                finalImgWidth = availableWidth;
+                finalImgHeight = finalImgWidth / imgAspectRatio;
+            } else {
+                finalImgHeight = availableHeight;
                 finalImgWidth = finalImgHeight * imgAspectRatio;
             }
 
-            const x = (pdfPageWidth - finalImgWidth) / 2;
-            const y = (pdfPageHeight - finalImgHeight) / 2;
-    
+            const x = (pdfWidth - finalImgWidth) / 2;
+            const y = margin + headerHeight;
+
             pdf.addImage(imgData, 'PNG', x, y, finalImgWidth, finalImgHeight);
-            pdf.save(`Monitoring_Lembur_${selectedNik}_${selectedYear}-${selectedMonth+1}.pdf`);
+            pdf.save(`Monitoring_Lembur_${selectedEmployee.nik}_${selectedYear}-${selectedMonth + 1}.pdf`);
 
         } catch (error) {
             console.error("Failed to generate PDF:", error);
         } finally {
-            root.unmount();
-            document.body.removeChild(hiddenPrintDiv);
             setIsDownloading(false);
         }
     };
@@ -329,7 +322,7 @@ export const LemburMonitoringTab: React.FC<LemburMonitoringTabProps> = ({
                     <span>{isDownloading ? 'Mencetak...' : 'Download'}</span>
                  </button>
              </div>
-             <div className="overflow-x-auto p-4">
+             <div className="overflow-x-auto p-4" ref={reportRef}>
                  <table className="min-w-full text-xs border-collapse border border-gray-300">
                      <thead className="bg-gray-100 text-center font-bold">
                          <tr>
