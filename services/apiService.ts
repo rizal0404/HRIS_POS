@@ -593,21 +593,31 @@ export const apiService = {
   },
 
   // --- FINGERPRINTING ---
-  getFingerprintForUser: async (userId: string): Promise<{ fingerprint_id: string } | null> => {
-    const { data, error } = await supabase.from('user_device_fingerprints').select('fingerprint_id').eq('user_id', userId).single();
+  getFingerprintOwner: async (fingerprintId: string): Promise<{ user_id: string } | null> => {
+    const { data, error } = await supabase.from('user_device_fingerprints').select('user_id').eq('fingerprint_id', fingerprintId).single();
     if (error && error.code === '42P01') { // undefined_table
         throw new Error("Tabel 'user_device_fingerprints' tidak ditemukan. Silakan lihat README.md untuk instruksi setup database.");
     }
-    handleSupabaseError(error, 'getFingerprintForUser');
+    // 'PGRST116' means no rows found, which is a valid case (unregistered device), not an error.
+    // We only pass other errors to the handler.
+    if (error && error.code !== 'PGRST116') {
+        handleSupabaseError(error, 'getFingerprintOwner');
+    }
     return data;
   },
 
-  setFingerprintForUser: async (userId: string, fingerprintId: string): Promise<void> => {
+  addFingerprintForUser: async (userId: string, fingerprintId: string): Promise<void> => {
     const { error } = await supabase.from('user_device_fingerprints').insert({ user_id: userId, fingerprint_id: fingerprintId });
     if (error && error.code === '42P01') { // undefined_table
       throw new Error("Tabel 'user_device_fingerprints' tidak ditemukan. Fitur keamanan perangkat dinonaktifkan. Silakan lihat README.md untuk instruksi setup database.");
     }
-    handleSupabaseError(error, 'setFingerprintForUser');
+    // If we get a unique violation, it means another user registered the device in a race condition.
+    // The check in submitClockEvent will catch this on the next attempt. We can ignore the insert error here.
+    if (error && error.code === '23505') { // unique_violation
+        console.warn(`Attempted to register an already existing fingerprint: ${fingerprintId}. This might be a race condition.`);
+        return;
+    }
+    handleSupabaseError(error, 'addFingerprintForUser');
   },
 
   resetFingerprintForUser: async (userId: string): Promise<void> => {
@@ -639,13 +649,26 @@ export const apiService = {
   submitClockEvent: async (user: UserProfile, action: 'in' | 'out', data: any): Promise<void> => {
     const { position, todaySchedule, fingerprintId, ...formData } = data;
 
+    let isNewDevice = false;
+
     // Fingerprint check only for 'Bekerja di Pabrik'
     if (formData.workLocationType === 'Bekerja di Pabrik') {
-        const storedFingerprint = await apiService.getFingerprintForUser(user.id);
-        if (storedFingerprint) {
-            if (storedFingerprint.fingerprint_id !== fingerprintId) {
-                throw new Error("Perangkat tidak dikenali. Silakan gunakan perangkat yang biasa Anda gunakan untuk absen untuk mencegah penyalahgunaan akun.");
+        if (!fingerprintId) {
+            throw new Error("ID perangkat tidak dapat dideteksi. Absensi gagal. Harap refresh halaman dan izinkan akses yang diperlukan.");
+        }
+
+        const owner = await apiService.getFingerprintOwner(fingerprintId);
+
+        if (owner) {
+            // Device is registered
+            if (owner.user_id !== user.id) {
+                // Registered to someone else, block the action
+                throw new Error("Perangkat ini sudah terdaftar untuk pengguna lain. Silakan gunakan perangkat pribadi Anda untuk absen.");
             }
+            // If owner.user_id === user.id, it's a known device for this user. Proceed.
+        } else {
+            // Device is not registered by anyone. Mark it as a new device for this user.
+            isNewDevice = true;
         }
     }
     
@@ -697,12 +720,9 @@ export const apiService = {
       handleSupabaseError(error, 'submitClockEvent (clock-out)');
     }
 
-    // After successful clock event for 'Bekerja di Pabrik', bind fingerprint if it doesn't exist
-    if (formData.workLocationType === 'Bekerja di Pabrik') {
-        const storedFingerprint = await apiService.getFingerprintForUser(user.id);
-        if (!storedFingerprint) {
-            await apiService.setFingerprintForUser(user.id, fingerprintId);
-        }
+    // After successful clock event, if it was a new device, register it for the user.
+    if (formData.workLocationType === 'Bekerja di Pabrik' && isNewDevice) {
+        await apiService.addFingerprintForUser(user.id, fingerprintId);
     }
   },
 
