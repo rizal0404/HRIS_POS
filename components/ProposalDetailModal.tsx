@@ -1,6 +1,6 @@
 import React from 'react';
 import Modal from './Modal';
-import { Usulan, UsulanCuti, UsulanLembur, UsulanSubstitusi, UsulanJenis, UsulanStatus, UserProfile, UsulanPembetulanPresensi } from '../types';
+import { Usulan, UsulanCuti, UsulanLembur, UsulanSubstitusi, UsulanJenis, UsulanStatus, UserProfile, UsulanPembetulanPresensi, UsulanIzinSakit } from '../types';
 import { CalendarIcon, ClockIcon, UserIcon, FileTextIcon, ArrowLeftRightIcon } from './Icons';
 
 // Helper to format dates
@@ -60,7 +60,7 @@ export const ProposalDetailModal: React.FC<ProposalDetailModalProps> = ({ propos
     const renderProposalSpecificDetails = () => {
         switch (proposal.jenisAjuan) {
             case UsulanJenis.CutiTahunan:
-            case UsulanJenis.IzinSakit:
+            case UsulanJenis.CutiBesar:
                 const pCuti = proposal as UsulanCuti;
                 const penggantiName = pCuti.penggantiNik?.map(nik => employees.find(e => e.nik === nik)?.name || nik).join(', ') || '-';
                 return (
@@ -70,6 +70,17 @@ export const ProposalDetailModal: React.FC<ProposalDetailModalProps> = ({ propos
                         <DetailItem icon={<FileTextIcon />} label="Keterangan" value={pCuti.keterangan} />
                         {pCuti.linkBerkas && (
                              <DetailItem icon={<FileTextIcon />} label="Berkas" value={<a href={pCuti.linkBerkas} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">Lihat Berkas</a>} />
+                        )}
+                    </>
+                );
+            case UsulanJenis.IzinSakit:
+                const pIzin = proposal as UsulanIzinSakit;
+                return (
+                    <>
+                        <DetailItem icon={<CalendarIcon />} label="Periode Izin/Sakit" value={`${formatDate(pIzin.periode.startDate)} s/d ${formatDate(pIzin.periode.endDate)}`} />
+                        <DetailItem icon={<FileTextIcon />} label="Keterangan" value={pIzin.keterangan} />
+                        {pIzin.linkBerkas && (
+                             <DetailItem icon={<FileTextIcon />} label="Berkas" value={<a href={pIzin.linkBerkas} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">Lihat Berkas</a>} />
                         )}
                     </>
                 );
