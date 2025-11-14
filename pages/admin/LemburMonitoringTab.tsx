@@ -206,6 +206,22 @@ export const LemburMonitoringTab: React.FC<LemburMonitoringTabProps> = ({
                 }
             }
 
+            let jamLemburDisplay = '';
+            if (lemburRecord) {
+                if (schedule?.shift === 'OFF' && lemburRecord.jamAwal && lemburRecord.jamAkhir) {
+                    const start = new Date(`1970-01-01T${lemburRecord.jamAwal}`);
+                    const end = new Date(`1970-01-01T${lemburRecord.jamAkhir}`);
+                    if (end < start) {
+                        end.setDate(end.getDate() + 1);
+                    }
+                    const diffMs = end.getTime() - start.getTime();
+                    const diffHours = diffMs / (1000 * 60 * 60);
+                    jamLemburDisplay = `${diffHours.toFixed(2).replace(/\.00$/, '')} jam`;
+                } else {
+                    jamLemburDisplay = lemburRecord.jamLembur != null ? `${lemburRecord.jamLembur} jam` : '';
+                }
+            }
+
             data.push({
                 no: i,
                 tgl: `${String(i).padStart(2, '0')}/${String(selectedMonth + 1).padStart(2, '0')}`,
@@ -214,7 +230,7 @@ export const LemburMonitoringTab: React.FC<LemburMonitoringTabProps> = ({
                 jamAktual: jamAktual,
                 lemburMulai: lemburRecord?.jamAwal || '',
                 lemburSelesai: lemburRecord?.jamAkhir || '',
-                jamLembur: lemburRecord ? `${lemburRecord.jamLembur} jam` : '',
+                jamLembur: jamLemburDisplay,
                 uraianPekerjaan: lemburRecord?.keteranganLembur || (cutiRecord ? 'pangkep' : ''),
                 menyetujui: lemburRecord ? (employee.manager?.name || 'SUPER ADMIN') : (cutiRecord ? (employee.manager?.name || '') : ''),
                 keterangan: keterangan,

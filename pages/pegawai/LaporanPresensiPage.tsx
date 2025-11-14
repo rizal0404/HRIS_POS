@@ -56,6 +56,21 @@ export const LaporanPresensiPage: React.FC<LaporanPresensiPageProps> = ({ user, 
                     keterangan = 'Lembur';
                 }
             }
+            
+            let otValue = 0;
+            if (lemburRecord) {
+                if (schedule?.shift === 'OFF' && lemburRecord.jamAwal && lemburRecord.jamAkhir) {
+                    const start = new Date(`1970-01-01T${lemburRecord.jamAwal}`);
+                    const end = new Date(`1970-01-01T${lemburRecord.jamAkhir}`);
+                    if (end < start) {
+                        end.setDate(end.getDate() + 1);
+                    }
+                    const diffMs = end.getTime() - start.getTime();
+                    otValue = diffMs / (3600000); // 1000 * 60 * 60
+                } else {
+                    otValue = lemburRecord.jamLembur || 0;
+                }
+            }
 
             data.push({
                 no: i,
@@ -67,7 +82,7 @@ export const LaporanPresensiPage: React.FC<LaporanPresensiPageProps> = ({ user, 
                 realisasiMasuk: formatTime(presensiRecord?.clockInTimestamp),
                 realisasiPulang: formatTime(presensiRecord?.clockOutTimestamp),
                 ft: 0, tt: 0, dt: 0,
-                ot: lemburRecord?.jamLembur || 0,
+                ot: otValue,
                 otNormal: 0, otFlat: 0,
                 otStart: lemburRecord?.jamAwal || '',
                 otEnd: lemburRecord?.jamAkhir || '',

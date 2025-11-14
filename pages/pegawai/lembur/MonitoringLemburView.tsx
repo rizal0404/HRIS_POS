@@ -182,6 +182,22 @@ export const MonitoringLemburView: React.FC<MonitoringLemburViewProps> = ({ user
                     keterangan = 'Lembur';
                 }
             }
+            
+            let jamLemburDisplay = '';
+            if (lemburRecord) {
+                if (schedule?.shift === 'OFF' && lemburRecord.jamAwal && lemburRecord.jamAkhir) {
+                    const start = new Date(`1970-01-01T${lemburRecord.jamAwal}`);
+                    const end = new Date(`1970-01-01T${lemburRecord.jamAkhir}`);
+                    if (end < start) {
+                        end.setDate(end.getDate() + 1);
+                    }
+                    const diffMs = end.getTime() - start.getTime();
+                    const diffHours = diffMs / (1000 * 60 * 60);
+                    jamLemburDisplay = `${diffHours.toFixed(2).replace(/\.00$/, '')} jam`;
+                } else {
+                    jamLemburDisplay = lemburRecord.jamLembur != null ? `${lemburRecord.jamLembur} jam` : '';
+                }
+            }
 
             data.push({
                 no: i,
@@ -191,7 +207,7 @@ export const MonitoringLemburView: React.FC<MonitoringLemburViewProps> = ({ user
                 jamAktual: jamAktual,
                 lemburMulai: lemburRecord?.jamAwal || '',
                 lemburSelesai: lemburRecord?.jamAkhir || '',
-                jamLembur: lemburRecord ? `${lemburRecord.jamLembur} jam` : '',
+                jamLembur: jamLemburDisplay,
                 uraianPekerjaan: lemburRecord?.keteranganLembur || (cutiRecord ? 'pangkep' : ''),
                 menyetujui: lemburRecord ? (user.manager?.name || 'SUPER ADMIN') : (cutiRecord ? (user.manager?.name || '') : ''),
                 keterangan: keterangan,
