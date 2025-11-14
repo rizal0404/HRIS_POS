@@ -362,6 +362,7 @@ const PegawaiPage: React.FC<PegawaiPageProps> = ({ user, onLogout }) => {
   const [isAttendanceModalOpen, setIsAttendanceModalOpen] = useState(false);
   const [attendanceAction, setAttendanceAction] = useState<'in' | 'out'>('in');
   const [isLemburModalOpen, setIsLemburModalOpen] = useState(false);
+  const [editingLembur, setEditingLembur] = useState<UsulanLembur | null>(null);
   const [alert, setAlert] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
   const [proposalToDelete, setProposalToDelete] = useState<{ id: string; type: 'cuti' | 'lembur' | 'substitusi' | 'pembetulan' } | null>(null);
@@ -441,9 +442,15 @@ const PegawaiPage: React.FC<PegawaiPageProps> = ({ user, onLogout }) => {
 
   const handleLemburSubmitted = () => {
     setIsLemburModalOpen(false);
-    setAlert({ message: 'Ajuan lembur berhasil dikirim.', type: 'success' });
+    setEditingLembur(null);
+    setAlert({ message: 'Ajuan lembur berhasil dikirim/diperbarui.', type: 'success' });
     fetchData();
   }
+
+  const handleEditLembur = (lembur: UsulanLembur) => {
+    setEditingLembur(lembur);
+    setIsLemburModalOpen(true);
+  };
 
   const todayPresensi = useMemo(() => {
       const today = new Date();
@@ -566,7 +573,8 @@ const PegawaiPage: React.FC<PegawaiPageProps> = ({ user, onLogout }) => {
         case 'lembur':
             return <LemburView 
                         user={user}
-                        onAdd={() => setIsLemburModalOpen(true)} 
+                        onAdd={() => { setEditingLembur(null); setIsLemburModalOpen(true); }} 
+                        onEdit={handleEditLembur}
                         usulanLembur={usulanLembur} 
                         usulanCuti={usulanCuti}
                         usulanPembetulan={usulanPembetulan}
@@ -673,10 +681,11 @@ const PegawaiPage: React.FC<PegawaiPageProps> = ({ user, onLogout }) => {
       />
       <TambahLemburModal
         isOpen={isLemburModalOpen}
-        onClose={() => setIsLemburModalOpen(false)}
+        onClose={() => { setIsLemburModalOpen(false); setEditingLembur(null); }}
         onSuccess={handleLemburSubmitted}
         user={user}
         jadwal={jadwal}
+        lemburToEdit={editingLembur}
       />
       <ConfirmationModal
         isOpen={isConfirmModalOpen}

@@ -1,6 +1,44 @@
 import React, { useState, useMemo } from 'react';
 import { UsulanLembur, UsulanStatus } from '../../../types';
-import { SearchIcon, PlusIcon, EditIcon, TrashIcon, FilterXIcon, ChevronLeftIcon, ChevronRightIcon } from '../../../components/Icons';
+import { SearchIcon, PlusIcon, EditIcon, TrashIcon, FilterXIcon, ChevronLeftIcon, ChevronRightIcon, EyeIcon } from '../../../components/Icons';
+import Modal from '../../../components/Modal';
+
+const LemburDetailModal: React.FC<{
+    isOpen: boolean;
+    onClose: () => void;
+    lembur: UsulanLembur;
+}> = ({ isOpen, onClose, lembur }) => {
+    if (!isOpen) return null;
+
+    const dateObj = new Date(lembur.tanggalLembur + 'T00:00:00Z');
+    const dayName = isNaN(dateObj.getTime()) ? '-' : dateObj.toLocaleDateString('id-ID', { weekday: 'long' });
+    const formattedDate = isNaN(dateObj.getTime()) ? lembur.tanggalLembur : dateObj.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+
+    return (
+        <Modal isOpen={isOpen} onClose={onClose} title="Detail Data Lembur">
+            <div className="space-y-4">
+                <div className="p-4 bg-slate-50 rounded-lg">
+                    <h3 className="font-bold text-lg text-slate-800">{lembur.nama}</h3>
+                    <p className="text-sm text-slate-500">NIK: {lembur.nik}</p>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div><p className="text-xs text-slate-500">Tanggal</p><p className="font-semibold">{dayName}, {formattedDate}</p></div>
+                    <div><p className="text-xs text-slate-500">Shift</p><p className="font-semibold">{lembur.shift}</p></div>
+                    <div><p className="text-xs text-slate-500">Jam Lembur</p><p className="font-semibold">{lembur.jamAwal} - {lembur.jamAkhir}</p></div>
+                    <div><p className="text-xs text-slate-500">Total Jam</p><p className="font-semibold">{lembur.jamLembur} Jam</p></div>
+                    <div className="sm:col-span-2"><p className="text-xs text-slate-500">Kategori</p><p className="font-semibold">{lembur.kategoriLembur}</p></div>
+                    <div className="sm:col-span-2"><p className="text-xs text-slate-500">Keterangan</p><p className="font-semibold">{lembur.keteranganLembur}</p></div>
+                    <div><p className="text-xs text-slate-500">Status</p><p className="font-semibold">{lembur.status}</p></div>
+                </div>
+                <div className="flex justify-end pt-4 border-t">
+                    <button onClick={onClose} className="bg-slate-200 text-slate-800 font-bold py-2 px-6 rounded-md hover:bg-slate-300">
+                        Tutup
+                    </button>
+                </div>
+            </div>
+        </Modal>
+    );
+};
 
 const getStatusAbbreviation = (status: UsulanStatus) => {
     switch (status) {
@@ -16,12 +54,14 @@ interface DataLemburTabProps {
     onAdd: () => void;
     usulanLembur: UsulanLembur[];
     onDelete: (id: string) => void;
+    onEdit: (lembur: UsulanLembur) => void;
 }
 
-export const DataLemburTab: React.FC<DataLemburTabProps> = ({ onAdd, usulanLembur, onDelete }) => {
+export const DataLemburTab: React.FC<DataLemburTabProps> = ({ onAdd, usulanLembur, onDelete, onEdit }) => {
     const [currentPage, setCurrentPage] = useState(1);
     const [entriesPerPage, setEntriesPerPage] = useState(10);
     const [selectedLemburId, setSelectedLemburId] = useState<string | null>(null);
+    const [viewingLembur, setViewingLembur] = useState<UsulanLembur | null>(null);
     
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
@@ -80,6 +120,18 @@ export const DataLemburTab: React.FC<DataLemburTabProps> = ({ onAdd, usulanLembu
         }
     };
 
+    const handleEdit = () => {
+        if (selectedLembur) {
+            onEdit(selectedLembur);
+        }
+    };
+
+    const handleView = () => {
+        if (selectedLembur) {
+            setViewingLembur(selectedLembur);
+        }
+    };
+
     return (
         <div>
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4 pb-4 border-b">
@@ -104,8 +156,9 @@ export const DataLemburTab: React.FC<DataLemburTabProps> = ({ onAdd, usulanLembu
                     <button onClick={handleClearFilters} className="p-2.5 bg-gray-600 text-white rounded-md hover:bg-gray-700"><FilterXIcon className="w-5 h-5"/></button>
                 </div>
                 <div className="flex items-center gap-2 w-full md:w-auto shrink-0">
+                    <button onClick={handleView} disabled={!selectedLemburId} className="p-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 disabled:bg-gray-400 flex-1"><EyeIcon className="w-5 h-5 mx-auto"/></button>
                     <button onClick={onAdd} className="p-2 bg-green-500 text-white rounded-md hover:bg-green-600 flex-1"><PlusIcon className="w-5 h-5 mx-auto"/></button>
-                    <button className="p-2 bg-yellow-500 text-white rounded-md hover:bg-yellow-600 disabled:bg-gray-400 flex-1" disabled={!isActionable}><EditIcon className="w-5 h-5 mx-auto"/></button>
+                    <button onClick={handleEdit} className="p-2 bg-yellow-500 text-white rounded-md hover:bg-yellow-600 disabled:bg-gray-400 flex-1" disabled={!isActionable}><EditIcon className="w-5 h-5 mx-auto"/></button>
                     <button onClick={handleDelete} className="p-2 bg-red-500 text-white rounded-md hover:bg-red-600 disabled:bg-gray-400 flex-1" disabled={!isActionable}><TrashIcon className="w-5 h-5 mx-auto"/></button>
                 </div>
             </div>
@@ -206,6 +259,13 @@ export const DataLemburTab: React.FC<DataLemburTabProps> = ({ onAdd, usulanLembu
                     </button>
                 </div>
             </div>
+            {viewingLembur && (
+                <LemburDetailModal
+                    isOpen={!!viewingLembur}
+                    onClose={() => setViewingLembur(null)}
+                    lembur={viewingLembur}
+                />
+            )}
         </div>
     );
 };

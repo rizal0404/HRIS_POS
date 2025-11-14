@@ -10,9 +10,10 @@ interface TambahLemburModalProps {
     user: UserProfile;
     onSuccess: () => void;
     jadwal: JadwalKerja[];
+    lemburToEdit?: UsulanLembur | null;
 }
 
-export const TambahLemburModal: React.FC<TambahLemburModalProps> = ({ isOpen, onClose, user, onSuccess, jadwal }) => {
+export const TambahLemburModal: React.FC<TambahLemburModalProps> = ({ isOpen, onClose, user, onSuccess, jadwal, lemburToEdit }) => {
     const [tanggal, setTanggal] = useState('');
     const [shift, setShift] = useState('');
     const [shiftDisplay, setShiftDisplay] = useState('Jam Kerja Aktif -');
@@ -22,6 +23,28 @@ export const TambahLemburModal: React.FC<TambahLemburModalProps> = ({ isOpen, on
     const [kategori, setKategori] = useState('');
     const [keterangan, setKeterangan] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
+
+    useEffect(() => {
+        if (!isOpen) {
+            // Reset form when modal closes
+            setTanggal('');
+            setShift('');
+            setShiftDisplay('Jam Kerja Aktif -');
+            setJamAwal('');
+            setJamAkhir('');
+            setTanpaIstirahat([]);
+            setKategori('');
+            setKeterangan('');
+        } else if (lemburToEdit) {
+            // Populate form if editing
+            setTanggal(lemburToEdit.tanggalLembur);
+            setJamAwal(lemburToEdit.jamAwal);
+            setJamAkhir(lemburToEdit.jamAkhir);
+            setTanpaIstirahat(lemburToEdit.tanpaIstirahat || []);
+            setKategori(lemburToEdit.kategoriLembur);
+            setKeterangan(lemburToEdit.keteranganLembur);
+        }
+    }, [isOpen, lemburToEdit]);
 
     useEffect(() => {
         if (tanggal) {
@@ -66,23 +89,37 @@ export const TambahLemburModal: React.FC<TambahLemburModalProps> = ({ isOpen, on
         const diffHours = diffMs / (1000 * 60 * 60);
 
         try {
-            const newLembur: Omit<UsulanLembur, 'id' | 'timestamp' | 'authorUid'> = {
-                nik: user.nik,
-                nama: user.name,
-                seksi: user.seksi,
-                jenisAjuan: UsulanJenis.Lembur,
-                status: UsulanStatus.Diajukan,
-                rolePengaju: user.role as UserRole.Pegawai,
-                tanggalLembur: tanggal,
-                shift: shift,
-                jamAwal: jamAwal,
-                jamAkhir: jamAkhir,
-                tanpaIstirahat: tanpaIstirahat,
-                kategoriLembur: kategori,
-                keteranganLembur: keterangan,
-                jamLembur: parseFloat(diffHours.toFixed(2)),
-            };
-            await apiService.addLembur(newLembur);
+            if (lemburToEdit) {
+                const updatedLembur: Partial<UsulanLembur> = {
+                    tanggalLembur: tanggal,
+                    shift: shift,
+                    jamAwal: jamAwal,
+                    jamAkhir: jamAkhir,
+                    tanpaIstirahat: tanpaIstirahat,
+                    kategoriLembur: kategori,
+                    keteranganLembur: keterangan,
+                    jamLembur: parseFloat(diffHours.toFixed(2)),
+                };
+                await apiService.updateLembur(lemburToEdit.id, updatedLembur);
+            } else {
+                const newLembur: Omit<UsulanLembur, 'id' | 'timestamp' | 'authorUid'> = {
+                    nik: user.nik,
+                    nama: user.name,
+                    seksi: user.seksi,
+                    jenisAjuan: UsulanJenis.Lembur,
+                    status: UsulanStatus.Diajukan,
+                    rolePengaju: user.role as UserRole.Pegawai,
+                    tanggalLembur: tanggal,
+                    shift: shift,
+                    jamAwal: jamAwal,
+                    jamAkhir: jamAkhir,
+                    tanpaIstirahat: tanpaIstirahat,
+                    kategoriLembur: kategori,
+                    keteranganLembur: keterangan,
+                    jamLembur: parseFloat(diffHours.toFixed(2)),
+                };
+                await apiService.addLembur(newLembur);
+            }
             onSuccess();
         } catch (error) {
             console.error("Failed to submit overtime request:", error);
@@ -93,7 +130,7 @@ export const TambahLemburModal: React.FC<TambahLemburModalProps> = ({ isOpen, on
     };
 
     return (
-        <Modal isOpen={isOpen} onClose={onClose} title="Tambah Data Lembur">
+        <Modal isOpen={isOpen} onClose={onClose} title={lemburToEdit ? "Ubah Data Lembur" : "Tambah Data Lembur"}>
             <form onSubmit={handleSubmit}>
                 <div className="space-y-4">
                     {/* Tanggal */}
@@ -152,15 +189,15 @@ export const TambahLemburModal: React.FC<TambahLemburModalProps> = ({ isOpen, on
                         <label className="text-sm font-medium text-gray-700 md:text-right md:pt-1.5">Tanpa Istirahat</label>
                         <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
                             <div className="flex items-center gap-2">
-                                <input id="shift1-check" type="checkbox" value="Shift 1" onChange={handleCheckboxChange} className="h-4 w-4 text-red-600 border-gray-300 rounded focus:ring-red-500"/>
+                                <input id="shift1-check" type="checkbox" value="Shift 1" checked={tanpaIstirahat.includes('Shift 1')} onChange={handleCheckboxChange} className="h-4 w-4 text-red-600 border-gray-300 rounded focus:ring-red-500"/>
                                 <label htmlFor="shift1-check" className="text-sm">Shift 1</label>
                             </div>
                             <div className="flex items-center gap-2">
-                                <input id="shift2-check" type="checkbox" value="Shift 2" onChange={handleCheckboxChange} className="h-4 w-4 text-red-600 border-gray-300 rounded focus:ring-red-500"/>
+                                <input id="shift2-check" type="checkbox" value="Shift 2" checked={tanpaIstirahat.includes('Shift 2')} onChange={handleCheckboxChange} className="h-4 w-4 text-red-600 border-gray-300 rounded focus:ring-red-500"/>
                                 <label htmlFor="shift2-check" className="text-sm">Shift 2</label>
                             </div>
                             <div className="flex items-center gap-2">
-                                <input id="shift3-check" type="checkbox" value="Shift 3" onChange={handleCheckboxChange} className="h-4 w-4 text-red-600 border-gray-300 rounded focus:ring-red-500"/>
+                                <input id="shift3-check" type="checkbox" value="Shift 3" checked={tanpaIstirahat.includes('Shift 3')} onChange={handleCheckboxChange} className="h-4 w-4 text-red-600 border-gray-300 rounded focus:ring-red-500"/>
                                 <label htmlFor="shift3-check" className="text-sm">Shift 3</label>
                             </div>
                         </div>

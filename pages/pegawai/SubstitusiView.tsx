@@ -43,8 +43,12 @@ const PengajuanSubstitusiModal: React.FC<{
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!shiftAwal || shiftAwal === 'Jadwal tidak ditemukan' || shiftAwal === 'OFF') {
-            alert('Tidak dapat mengajukan substitusi untuk tanggal ini (jadwal tidak ditemukan atau hari libur).');
+        if (!shiftAwal || shiftAwal === 'Jadwal tidak ditemukan') {
+            alert('Tidak dapat mengajukan substitusi untuk tanggal ini (jadwal tidak ditemukan).');
+            return;
+        }
+        if (shiftAwal === shiftBaru) {
+            alert('Shift baru tidak boleh sama dengan shift awal.');
             return;
         }
         setIsSubmitting(true);

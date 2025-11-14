@@ -956,9 +956,19 @@ USING ((SELECT role FROM public.user_profiles WHERE id = auth.uid()) IN ('Manage
       return mapCutiToCamelCase(data);
   },
   updateLembur: async (id: string, updatedData: Partial<UsulanLembur>): Promise<UsulanLembur> => {
-      const payload: Record<string, any> = {};
-      // Add fields to update as needed
+      const payload: Record<string, any> = {
+        // When a 'Revisi' is submitted, it should become 'Diajukan' again for re-approval.
+        status: UsulanStatus.Diajukan,
+      };
+
+      if (updatedData.tanggalLembur) payload.tanggal_lembur = updatedData.tanggalLembur;
+      if (updatedData.shift) payload.shift = updatedData.shift;
+      if (updatedData.jamAwal) payload.jam_awal = updatedData.jamAwal;
+      if (updatedData.jamAkhir) payload.jam_akhir = updatedData.jamAkhir;
+      if (updatedData.tanpaIstirahat) payload.tanpa_istirahat = updatedData.tanpaIstirahat;
+      if (updatedData.kategoriLembur) payload.kategori_lembur = updatedData.kategoriLembur;
       if (updatedData.keteranganLembur) payload.keterangan_lembur = updatedData.keteranganLembur;
+      if (typeof updatedData.jamLembur === 'number') payload.jam_lembur = updatedData.jamLembur;
 
       const { data, error } = await supabase.from('usulan_lembur').update(payload).eq('id', id).select().single();
       handleSupabaseError(error, 'updateLembur');

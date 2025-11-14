@@ -6,6 +6,7 @@ import { MonitoringLemburView } from './lembur/MonitoringLemburView';
 interface LemburViewProps {
     user: UserProfile;
     onAdd: () => void;
+    onEdit: (lembur: UsulanLembur) => void;
     usulanLembur: UsulanLembur[];
     usulanCuti: UsulanCuti[];
     usulanPembetulan: UsulanPembetulanPresensi[];
@@ -60,6 +61,7 @@ export const LemburView: React.FC<LemburViewProps> = (props) => {
                             onAdd={props.onAdd}
                             usulanLembur={props.usulanLembur}
                             onDelete={props.onDelete}
+                            onEdit={props.onEdit}
                         />
                     )}
                     {activeTab === 'monitoring' && (
