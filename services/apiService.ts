@@ -1,4 +1,5 @@
 
+
 import { supabase } from './supabase';
 import { UserProfile, JadwalKerja, UsulanCuti, UsulanLembur, Usulan, UsulanStatus, ShiftConfig, Presensi, UsulanSubstitusi, Seksi, UnitKerja, VendorConfig, UsulanJenis, UsulanPembetulanPresensi, LeaveQuota, UsulanIzinSakit } from '../types';
 // Fix: Import mockUserProfiles for the seeder function.
@@ -387,7 +388,7 @@ export const apiService = {
         .from('manajemen_profiles')
         .select('*, manager:manager_id(name)')
         .eq('id', id)
-        .single();
+        .maybeSingle();
     
     // If an error occurred that ISN'T a "not found" error, we should throw it.
     if (mgmtError && mgmtError.code !== 'PGRST116') {
@@ -416,10 +417,18 @@ export const apiService = {
   },
 
   getUserProfileByNik: async (nik: string): Promise<UserProfile | null> => {
-    const { data: mgmtProfile } = await supabase.from('manajemen_profiles').select('*, manager:manager_id(name)').eq('nik', nik).single();
+    const { data: mgmtProfile, error: mgmtError } = await supabase.from('manajemen_profiles').select('*, manager:manager_id(name)').eq('nik', nik).single();
+    
+    if (mgmtError && mgmtError.code !== 'PGRST116') {
+        handleSupabaseError(mgmtError, 'getUserProfileByNik (manajemen)');
+    }
     if (mgmtProfile) return mapProfileToCamelCase(mgmtProfile);
     
-    const { data: pegawaiProfile } = await supabase.from('pegawai_profiles').select('*, manager:manager_id(name)').eq('nik', nik).single();
+    const { data: pegawaiProfile, error: pegawaiError } = await supabase.from('pegawai_profiles').select('*, manager:manager_id(name)').eq('nik', nik).single();
+
+    if (pegawaiError && pegawaiError.code !== 'PGRST116') {
+      handleSupabaseError(pegawaiError, 'getUserProfileByNik (pegawai)');
+    }
     return mapProfileToCamelCase(pegawaiProfile);
   },
 
