@@ -3,7 +3,7 @@ declare const jspdf: any;
 declare const html2canvas: any;
 
 import React, { useState, useMemo, useRef } from 'react';
-import { UserProfile, JadwalKerja, Presensi, ShiftConfig, UsulanLembur, UsulanCuti, UsulanStatus, VendorConfig, UsulanPembetulanPresensi } from '../../types';
+import { UserProfile, JadwalKerja, Presensi, ShiftConfig, UsulanLembur, UsulanCuti, UsulanStatus, VendorConfig, UsulanPembetulanPresensi, UsulanIzinSakit } from '../../types';
 import { SearchIcon, PrintIcon } from '../../components/Icons';
 
 const monthNames = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
@@ -16,12 +16,13 @@ interface LaporanPresensiTabProps {
     allPresensi: Presensi[];
     allLembur: UsulanLembur[];
     allCuti: UsulanCuti[];
+    allIzinSakit: UsulanIzinSakit[];
     allShiftConfigs: ShiftConfig[];
     allVendorConfigs: VendorConfig[];
     allPembetulan: UsulanPembetulanPresensi[];
 }
 
-export const LaporanPresensiTab: React.FC<LaporanPresensiTabProps> = ({ employees, allSchedules, allPresensi, allLembur, allCuti, allShiftConfigs, allPembetulan }) => {
+export const LaporanPresensiTab: React.FC<LaporanPresensiTabProps> = ({ employees, allSchedules, allPresensi, allLembur, allCuti, allIzinSakit, allShiftConfigs, allPembetulan }) => {
     const [selectedNik, setSelectedNik] = useState(employees[0]?.nik || '');
     const [selectedMonth, setSelectedMonth] = useState(10); // November
     const [selectedYear, setSelectedYear] = useState(2025);
@@ -40,6 +41,7 @@ export const LaporanPresensiTab: React.FC<LaporanPresensiTabProps> = ({ employee
         const presensi = allPresensi.filter(p => p.nik === selectedNik);
         const lembur = allLembur.filter(l => l.nik === selectedNik);
         const cuti = allCuti.filter(c => c.nik === selectedNik);
+        const izinSakit = allIzinSakit.filter(i => i.nik === selectedNik);
         const pembetulan = allPembetulan.filter(p => p.nik === selectedNik);
 
         const daysInMonth = new Date(selectedYear, selectedMonth + 1, 0).getDate();
@@ -54,6 +56,7 @@ export const LaporanPresensiTab: React.FC<LaporanPresensiTabProps> = ({ employee
             let presensiRecord = presensi.find(p => p.tanggal === dateStringDDMMYYYY);
             const lemburRecord = lembur.find(l => l.tanggalLembur === dateStringYYYYMMDD && l.status === UsulanStatus.Disetujui);
             const cutiRecord = cuti.find(c => c.status === UsulanStatus.Disetujui && date >= new Date(c.periode.startDate + 'T00:00:00') && date <= new Date(c.periode.endDate + 'T00:00:00'));
+            const izinSakitRecord = izinSakit.find(c => c.status === UsulanStatus.Disetujui && date >= new Date(c.periode.startDate + 'T00:00:00') && date <= new Date(c.periode.endDate + 'T00:00:00'));
             
             const approvedCorrections = pembetulan.filter(p => p.tanggalPembetulan === dateStringYYYYMMDD && p.status === UsulanStatus.Disetujui);
             if (approvedCorrections.length > 0) {
@@ -70,11 +73,11 @@ export const LaporanPresensiTab: React.FC<LaporanPresensiTabProps> = ({ employee
             }
 
             const shiftInfo = schedule ? shiftMap.get(schedule.shift) : null;
-            const [regulerMasuk, regulerPulang] = shiftInfo?.time.split('-') || ['', ''];
+            const [regulerMasuk, regulerPulang] = (schedule?.shift === 'OFF' || cutiRecord || izinSakitRecord) ? ['OFF', 'OFF'] : (shiftInfo?.time.split('-') || ['', '']);
 
             const formatTime = (ts: any) => ts ? new Date(ts.toDate()).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '';
 
-            let keterangan = cutiRecord ? cutiRecord.jenisAjuan : (schedule?.shift === 'OFF' ? 'Libur' : '');
+            let keterangan = cutiRecord ? cutiRecord.jenisAjuan : (izinSakitRecord ? 'Izin/Sakit' : (schedule?.shift === 'OFF' ? 'Libur' : ''));
             if (lemburRecord) {
                 if (keterangan && keterangan !== 'Libur') {
                     keterangan = `${keterangan}; Lembur`;
@@ -87,7 +90,7 @@ export const LaporanPresensiTab: React.FC<LaporanPresensiTabProps> = ({ employee
                 no: i,
                 nik: employee.nik,
                 tanggal: date.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }),
-                shift: schedule?.shift || (cutiRecord ? 'CUTI' : 'Libur'),
+                shift: schedule?.shift || (cutiRecord ? 'CUTI' : (izinSakitRecord ? 'SAKIT' : 'Libur')),
                 regulerMasuk,
                 regulerPulang,
                 realisasiMasuk: formatTime(presensiRecord?.clockInTimestamp),
@@ -103,7 +106,7 @@ export const LaporanPresensiTab: React.FC<LaporanPresensiTabProps> = ({ employee
             });
         }
         return { reportData: data, selectedEmployee: employee };
-    }, [selectedNik, selectedMonth, selectedYear, employees, allSchedules, allPresensi, allLembur, allCuti, shiftMap, allPembetulan]);
+    }, [selectedNik, selectedMonth, selectedYear, employees, allSchedules, allPresensi, allLembur, allCuti, allIzinSakit, shiftMap, allPembetulan]);
 
     const handleDownload = async () => {
         if (!reportRef.current || !selectedEmployee) return;
