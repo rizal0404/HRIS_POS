@@ -13,32 +13,27 @@ function App() {
   const [isLoading, setIsLoading] = useState(true);
 
   const checkSessionAndSetUser = useCallback(async () => {
-    console.log("App: Running session check...");
     try {
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
       if (sessionError) throw sessionError;
 
       if (session?.user) {
-        console.log("App: Session found, fetching user profile for ID:", session.user.id);
         const userProfile = await apiService.getUserProfileById(session.user.id);
 
         if (userProfile) {
-          console.log("App: User profile fetched successfully.", userProfile);
           setUser(userProfile);
         } else {
-          console.warn("App: User has a session but no profile was found in the database. Logging out.");
+          // User has a session but no profile, force logout.
           await apiService.logout();
           setUser(null);
         }
       } else {
-        console.log("App: No active session found. User is logged out.");
         setUser(null);
       }
     } catch (error) {
       console.error("App: CRITICAL - Error during session check:", error);
       setUser(null);
     } finally {
-      console.log("App: Session check complete. Setting isLoading to false.");
       setIsLoading(false);
     }
   }, []);
@@ -49,16 +44,14 @@ function App() {
 
     // Set up a listener for subsequent auth changes (e.g., login/logout).
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      console.log(`App: Auth event received - ${event}`);
       // When user logs in or out, re-run the session check.
-      if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') {
+      if (event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'INITIAL_SESSION') {
         checkSessionAndSetUser();
       }
     });
 
     // Cleanup the subscription on component unmount.
     return () => {
-      console.log("App: Unsubscribing from auth state change listener.");
       subscription.unsubscribe();
     };
   }, [checkSessionAndSetUser]);
