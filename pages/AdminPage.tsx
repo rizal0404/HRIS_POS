@@ -511,9 +511,9 @@ const AdminPage: React.FC<AdminPageProps> = ({ user, onLogout }) => {
             case 'persetujuanPembetulan':
                 return <ProposalsTab title="Persetujuan Pembetulan" proposals={proposalsForUser.filter(p => p.jenisAjuan === UsulanJenis.PembetulanPresensi)} employees={allEmployees} onViewDetails={setProposalToView} onApproveClick={handleApprove} onRejectClick={handleReject} canApprove={true} onPreviewClick={() => {}} onBulkApprove={(ids) => handleBulkAction(ids, 'approve')} onBulkReject={(ids) => handleBulkAction(ids, 'reject')} />;
             case 'dataManajemen':
-                return <EmployeesTab employees={allManajemen} allEmployees={allEmployees} allSeksi={allSeksi} allUnitKerja={allUnitKerja} onDataChange={fetchData} mode="manajemen" />;
+                return <EmployeesTab key="manajemen" employees={allManajemen} allEmployees={allEmployees} allSeksi={allSeksi} allUnitKerja={allUnitKerja} onDataChange={fetchData} mode="manajemen" />;
             case 'dataPegawai':
-                return <EmployeesTab employees={allPegawai} allEmployees={allEmployees} allSeksi={allSeksi} allUnitKerja={allUnitKerja} onDataChange={fetchData} mode="pegawai" />;
+                return <EmployeesTab key="pegawai" employees={allPegawai} allEmployees={allEmployees} allSeksi={allSeksi} allUnitKerja={allUnitKerja} onDataChange={fetchData} mode="pegawai" />;
             case 'jadwalShift':
                 return <ShiftScheduleView schedules={allSchedules} employees={allPegawai} shiftConfigs={allShiftConfigs} showAdminControls onDataChange={fetchData} allSeksi={allSeksi} allUnitKerja={allUnitKerja} />;
             case 'presensiTim':
