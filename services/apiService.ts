@@ -745,13 +745,44 @@ export const apiService = {
     }
     
     const todayYYYYMMDD = getLocalYYYYMMDD(new Date());
-    const { data: existingRecord, error: fetchError } = await supabase.from('presensi').select('*').eq('nik', user.nik).eq('tanggal', todayYYYYMMDD).maybeSingle();
+    // Try fetching today's record first
+    let query = supabase.from('presensi').select('*').eq('nik', user.nik).eq('tanggal', todayYYYYMMDD).maybeSingle();
+    let { data: existingRecord, error: fetchError } = await query;
+
     if (fetchError && fetchError.code === '42P01') {
         const userMessage = "Tabel 'presensi' tidak ditemukan. Gagal menyimpan data presensi. Silakan hubungi administrator untuk membuat tabel di database.";
         console.error(`Supabase error in submitClockEvent: ${userMessage}`);
         throw new Error(userMessage);
     }
     handleSupabaseError(fetchError, 'submitClockEvent (fetch)');
+
+    // LOGIC FOR OVERNIGHT SHIFT:
+    // If action is OUT, and we don't have a record for today (or today's record is empty/invalid),
+    // check if there's an open session from YESTERDAY.
+    if (action === 'out') {
+        const hasValidTodayRecord = existingRecord && existingRecord.clock_in_timestamp && !existingRecord.clock_out_timestamp;
+        
+        if (!hasValidTodayRecord) {
+             const yesterday = new Date();
+             yesterday.setDate(yesterday.getDate() - 1);
+             const yesterdayYYYYMMDD = getLocalYYYYMMDD(yesterday);
+             
+             const { data: yesterdayRecord, error: yesterdayError } = await supabase
+                .from('presensi')
+                .select('*')
+                .eq('nik', user.nik)
+                .eq('tanggal', yesterdayYYYYMMDD)
+                .maybeSingle();
+                
+             // If we found an open session from yesterday (Clock In exists, Clock Out missing), use that record.
+             if (yesterdayRecord && yesterdayRecord.clock_in_timestamp && !yesterdayRecord.clock_out_timestamp) {
+                 existingRecord = yesterdayRecord;
+                 // We don't overwrite fetchError here because the initial fetch was valid (just empty), 
+                 // but checking yesterdayError is good practice if needed.
+                 if (yesterdayError) handleSupabaseError(yesterdayError, 'submitClockEvent (fetch yesterday)');
+             }
+        }
+    }
 
     if (action === 'out' && (!existingRecord || !existingRecord.clock_in_timestamp)) {
       throw new Error("Clock-in tidak ditemukan. Anda tidak dapat melakukan clock-out.");
@@ -774,6 +805,7 @@ export const apiService = {
       const { error } = await supabase.from('presensi').upsert(payload, { onConflict: 'nik,tanggal' });
       handleSupabaseError(error, 'submitClockEvent (clock-in)');
     } else { // action === 'out'
+      // existingRecord is guaranteed to exist here due to check above
       const clockInTime = new Date(existingRecord.clock_in_timestamp);
       const clockOutTime = new Date();
       const totalHours = (clockOutTime.getTime() - clockInTime.getTime()) / (1000 * 60 * 60);

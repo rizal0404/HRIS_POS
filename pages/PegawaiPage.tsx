@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { UserProfile, JadwalKerja, UsulanCuti, UsulanLembur, ShiftConfig, Presensi, Usulan, UsulanJenis, UsulanSubstitusi, VendorConfig, UsulanPembetulanPresensi, UsulanStatus, UserRole, UsulanIzinSakit } from '../types';
 import { apiService } from '../services/apiService';
@@ -457,27 +458,44 @@ const PegawaiPage: React.FC<PegawaiPageProps> = ({ user, onLogout }) => {
     setIsLemburModalOpen(true);
   };
 
-  const todayPresensi = useMemo(() => {
+  const activePresensiSession = useMemo(() => {
+      // 1. Check for today's record
       const today = new Date();
       const todayStr = `${String(today.getDate()).padStart(2, '0')}/${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`;
-      return presensi.find(p => p.tanggal === todayStr);
+      const todayRecord = presensi.find(p => p.tanggal === todayStr);
+      if (todayRecord) return todayRecord;
+
+      // 2. If no record for today, check for an open session from yesterday (Clock In exists, Clock Out missing)
+      // This handles shift 3 where clock-out happens the next day
+      const openSession = presensi.find(p => p.clockInTimestamp && !p.clockOutTimestamp);
+      return openSession;
   }, [presensi]);
 
   const handleAttendanceClick = (action: 'in' | 'out') => {
     if (action === 'in') {
-      if (todayPresensi?.clockInTimestamp) {
-        setAlert({ message: 'Anda sudah melakukan clock-in hari ini.', type: 'error' });
+      if (activePresensiSession?.clockInTimestamp && !activePresensiSession?.clockOutTimestamp) {
+        setAlert({ message: 'Anda sudah melakukan clock-in untuk sesi aktif ini.', type: 'error' });
         return;
+      }
+      // If previous session is complete, allow new clock in (will be for today)
+      if (activePresensiSession?.clockInTimestamp && activePresensiSession?.clockOutTimestamp) {
+          // Check if the "complete" session is actually today's session
+          const today = new Date();
+          const todayStr = `${String(today.getDate()).padStart(2, '0')}/${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`;
+          if (activePresensiSession.tanggal === todayStr) {
+               setAlert({ message: 'Anda sudah menyelesaikan absensi hari ini.', type: 'error' });
+               return;
+          }
       }
     }
 
     if (action === 'out') {
-      if (!todayPresensi?.clockInTimestamp) {
+      if (!activePresensiSession?.clockInTimestamp) {
         setAlert({ message: 'Anda harus clock-in terlebih dahulu sebelum clock-out.', type: 'error' });
         return;
       }
-      if (todayPresensi?.clockOutTimestamp) {
-        setAlert({ message: 'Anda sudah melakukan clock-out hari ini.', type: 'error' });
+      if (activePresensiSession?.clockOutTimestamp) {
+        setAlert({ message: 'Anda sudah melakukan clock-out untuk sesi ini.', type: 'error' });
         return;
       }
     }
@@ -489,42 +507,8 @@ const PegawaiPage: React.FC<PegawaiPageProps> = ({ user, onLogout }) => {
     const handleAttendanceSuccess = (message: string) => {
         setIsAttendanceModalOpen(false);
         setAlert({ message, type: 'success' });
-
-        // Optimistic UI Update
-        const now = new Date();
-        const getLocalDDMMYYYY = (date: Date): string => {
-            const day = String(date.getDate()).padStart(2, '0');
-            const month = String(date.getMonth() + 1).padStart(2, '0');
-            const year = date.getFullYear();
-            return `${day}/${month}/${year}`;
-        };
-        const todayStr = getLocalDDMMYYYY(now);
-        const todaySchedule = jadwal.find(j => j.tanggal === todayStr);
-
-        if (attendanceAction === 'in') {
-            const newPresensi: Presensi = {
-                id: `temp-${now.getTime()}`,
-                nik: user.nik,
-                nama: user.name,
-                tanggal: todayStr,
-                shift: todaySchedule?.shift || 'OFF',
-                clockInTimestamp: { toDate: () => now },
-            };
-            setPresensi(prev => [...prev.filter(p => p.tanggal !== todayStr), newPresensi]);
-        } else { // 'out'
-            setPresensi(prev => prev.map(p => {
-                if (p.tanggal === todayStr) {
-                    const clockInTime = p.clockInTimestamp.toDate();
-                    const totalHours = (now.getTime() - clockInTime.getTime()) / (1000 * 60 * 60);
-                    return { 
-                        ...p, 
-                        clockOutTimestamp: { toDate: () => now },
-                        totalHours: parseFloat(totalHours.toFixed(2))
-                    };
-                }
-                return p;
-            }));
-        }
+        // Refresh data to ensure state consistency from DB
+        fetchData();
     };
 
 
@@ -581,7 +565,7 @@ const PegawaiPage: React.FC<PegawaiPageProps> = ({ user, onLogout }) => {
                         user={user}
                         onAttend={handleAttendanceClick}
                         jadwal={jadwal}
-                        todayPresensi={todayPresensi}
+                        todayPresensi={activePresensiSession}
                         usulan={allUsulan}
                     />;
         case 'cuti':
